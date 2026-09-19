@@ -53,7 +53,7 @@ pub struct RouterConfig {
     /// 英文模式的那一份（`[general] english_full_width_punctuation`）。
     pub english_full_width: bool,
 
-    /// 大千注音（[general] zhuyin）。
+    /// 大千注音（\[general\] zhuyin）。
     pub zhuyin: bool,
 
     /// 按应用的设置（`[apps]`），按宿主 exe 名认。

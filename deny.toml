@@ -1,0 +1,42 @@
+# cargo-deny 门禁配置：依赖树的许可证与 RustSec 已知漏洞在 PR 与 main 上都要过这道门
+# （.github/workflows/quality.yml 的 deps job；audit.yml 的 rustsec 照旧每周跑一遍兜底）。
+# 本地跑：cargo deny check（先 cargo install cargo-deny）。
+#
+# 白名单来自 2026-09-20 `cargo deny list` 对整棵依赖树的实测：
+#   - 本仓 qingjian-* crate：GPL-3.0-or-later（根 Cargo.toml 的 license）
+#   - self_cell：Apache-2.0 OR GPL-2.0-only 双许可，走 Apache-2.0 那条，兼容
+#   - r-efi（UEFI 引导段）：LGPL-2.1-or-later，与 GPL-3.0 兼容
+# 新依赖的许可证不在表里时，先核与 GPL-3.0 的兼容性再决定加不加，不要随手往 allow 里塞。
+
+[advisories]
+# RustSec 里的漏洞 / unsound / 被撤下版本一律红；unmaintained 撞上就红，除非在 ignore 里记了 reason。
+# 新依赖触发 unmaintained 时先看有没有升级路径：能升就升，升不了才往 ignore 里记 reason。
+yanked = "deny"
+unmaintained = "all"
+ignore = [
+    # 传递依赖里两个「无人维护」且没有可升级路径的包：门保持全绿，但记录在案；
+    # 哪天任一条被换掉/修复，unused-ignored-advisory 会警告清掉对应 ignore。
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser 无人维护（cosmic-text fork -> fontdb 传递引入，无安全升级）；根治是渲染器迁到 skrifa（fontations）" },
+    { id = "RUSTSEC-2024-0436", reason = "paste 不再维护（传递引入的 proc-macro 工具，功能已冻结、无替代品）" },
+]
+
+[licenses]
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "GPL-3.0-or-later",
+    "ISC",
+    "LGPL-2.1-or-later",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+[bans]
+# windows-rs 一家（0.62 / 0.100 / 0.3）等多版本并存是合法的，不拦死；但出现新的重复版本要亮出来看
+multiple-versions = "warn"

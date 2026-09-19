@@ -1,0 +1,114 @@
+# PR 与 main 上的质量门：PR 标题规范（与 .githooks/commit-msg 同一套 Conventional Commits）、
+# 依赖许可证与已知漏洞（cargo-deny，deny.toml 在根目录）、秘密扫描（gitleaks，全历史）、仓库卫生。
+# 与 ci.yml（编译 / 测试 / 文档）和 audit.yml（周度 rustsec + 覆盖率）互补；actions 一律钉 commit，Dependabot 每周更新。
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    name: PR title (Conventional Commits)
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        with:
+          # 与 .githooks/commit-msg 同一套类型与范围（docs/contributing.md「提交信息」）
+          types: |
+            feat
+            fix
+            docs
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            style
+            revert
+          scopes: |
+            core
+            platform
+            render
+            dictionary
+            translate
+            learning
+            predict
+            lm
+            neural
+            format
+            cli
+            macos
+            windows
+            server
+            tsf
+            settings
+            installer
+            linux
+            tools
+            docs
+            ci
+            deps
+            release
+          # 范围可省略（跨好几处时）；说明部分不能为空
+          requireScope: false
+          subjectPattern: ^\S.*$
+          subjectPatternError: 'PR 标题说明部分不能为空，例如 fix(core): 修自绘输入框吞数字'
+
+  deps:
+    name: Dependency licenses / advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          arguments: --locked
+
+  secrets:
+    name: Secrets scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  hygiene:
+    name: Repo hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check for junk files
+        run: |
+          junk="$(git ls-files | grep -E '(^|/)(\.DS_Store|Thumbs\.db|\._|~\$|.*\.tmp)$' || true)"
+          if [[ -n "$junk" ]]; then
+            echo "$junk" >&2
+            echo "仓库里不该有隐藏 / 系统元数据 / 临时文件（词典打包混进这种文件会出 #166 那种事）" >&2
+            exit 1
+          fi

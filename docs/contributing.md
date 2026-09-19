@@ -55,7 +55,7 @@
   - 范围：crate 或壳的名字——`core` `platform` `render` `dictionary` `translate` `learning` `predict` `lm` `neural` `format` `cli`
     `macos` `windows`（Server / DLL / 设置程序细分时用 `server` `tsf` `settings`）`installer` `linux` `tools` `docs` `ci` `deps` `release`；
     跨好几处的可以省略。不兼容的改动在范围后加 `!`。
-  - 正文写「为什么」与取舍，一行一条；不加 AI 署名。`.githooks/commit-msg` 会拦第一行不合格式的提交。
+  - 正文写「为什么」与取舍，一行一条；不加 AI 署名。`.githooks/commit-msg` 会拦第一行不合格式的提交；PR 标题用同一套格式，CI 的 quality.yml 会拦。
   - 2026-09-16 之前的历史是「`macOS：……` / `Core：……`」的中文冒号格式，不重写。
 
 ## 文档同步
@@ -74,7 +74,9 @@
 
 ## CI 与发版
 
-- CI 三个 job（Linux 全量 / macOS 壳 / Windows 三 crate）都 `--locked`；Dependabot 升 actions；每周 `cargo audit`。
+- CI：ci.yml 三个 job（Linux 全量含文档门 / macOS 壳 / Windows 三 crate）都 `--locked`；quality.yml 在 PR 与 main 上跑质量门：
+  PR 标题规范（与提交信息钩子同一套类型与范围）、依赖许可证与已知漏洞（cargo-deny，根目录 `deny.toml`）、秘密扫描（gitleaks）、仓库卫生（垃圾文件）。
+  Dependabot 升 actions；audit.yml 每周 rustsec + 全 workspace 覆盖率（llvm-cov，产物留 artifact）。
 - 发版：推 `<平台>-v<版本>` 标签触发 `release.yml`，门禁是版本号 = 标签且不带 -dev、标签在 main 上、产品数据按 SHA256SUMS 校验。
 - CHANGELOG 手写、发版时由维护者统一改（PR 不动它）。流程与 Secrets 见 [notes/release.md](notes/release.md)。
 

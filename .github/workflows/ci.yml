@@ -1,4 +1,4 @@
-# 三个 job：Linux 跑 fmt / clippy / 全 workspace 测试（排除 IMK 外壳）；macOS 与 Windows runner 各编各的壳并跑平台测试，
+# 三个 job：Linux 跑 fmt / clippy / 文档门 / 全 workspace 测试（排除 IMK 外壳）；macOS 与 Windows runner 各编各的壳并跑平台测试，
 # 平台特有的编译错（Objective-C 调用、TSF 导出、WinUI）在 PR 里就暴露，不等发版。仓库公开，Actions 不计费。
 # actions 一律钉到 commit（注释里是对应的标签），Dependabot 每周提 PR 更新；cargo 全加 --locked，Cargo.lock 没提交就报错。
 name: ci
@@ -21,6 +21,7 @@ env:
 jobs:
   core:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,11 +40,16 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --exclude qingjian-macos --all-targets --locked -- -D warnings
 
+      # 坏的内联链接 / 文档告警在 PR 里就红，不用等发版
+      - name: Docs (rustdoc, warnings as errors)
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --exclude qingjian-macos --locked
+
       - name: Test
         run: cargo test --workspace --exclude qingjian-macos --locked
 
   macos:
     runs-on: macos-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -64,6 +70,7 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    timeout-minutes: 30
     env:
       # Server 的 build.rs 嵌 uiAccess manifest，没签名的 exe（含测试二进制）起不来（os error 740）；与 release.yml 一样关掉
       QINGJIAN_UIACCESS: '0'
