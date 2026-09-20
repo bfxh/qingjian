@@ -1,6 +1,7 @@
 //! 文本服务对象 [`TextService`]：每线程一个，实现 `ITfTextInputProcessor`（激活 / 停用，[`processor`]）、
 //! `ITfKeyEventSink`（收键，[`key_sink`]）与显示属性提供者（[`display`]）。
 //! 连 Server 在 [`connection`]，中英模式在 [`mode`]，往文档写字在 [`document`]。
+#![allow(clippy::missing_const_for_thread_local)] // 1.97+ 新建 lint：初始化已在 const 块里仍误报
 
 mod connection;
 mod display;

@@ -1,6 +1,7 @@
 //! 组句 preedit 的内联下划线：按 TSF 显示属性协议给组句范围标一个「输入中」属性（对应 macOS marked text 的下划线）。
 //! 系统经 `ITfDisplayAttributeProvider`（实现在 [`super::service::TextService`]）来取 [`AttributeInfo`]
 //! （枚举器 [`AttributeEnum`]）；写组句时把 GUID 换成 atom 写进范围的 `GUID_PROP_ATTRIBUTE`。
+#![allow(clippy::missing_const_for_thread_local)] // 1.97+ 新建 lint：初始化已在 const 块里仍误报
 
 mod enumerator;
 mod info;
