@@ -67,6 +67,11 @@ impl Host {
         }
     }
 
+    /// 横排矩阵这套按键是否生效：开关开着（`[general] horizontal_grid`）而且排布是横排。
+    pub fn grid_keys(&self) -> bool {
+        self.horizontal_grid && self.layout == LayoutMode::Horizontal
+    }
+
     /// 新一轮候选：每页格数取配置与窗口能画的行数中较小者，云端槽位数取配置。
     pub fn reset_session(&mut self, preedit: Option<Preedit>, candidates: Vec<Candidate>) {
         self.status = None;
@@ -79,27 +84,40 @@ impl Host {
     pub fn render(&mut self) {
         let size = self.session.layout.page_size();
         let page = self.session.page;
-        let rows: Vec<Row> = self
-            .session
-            .page_cells()
+        // 横排展开成矩阵时画视口里的几行，序号只标在高亮所在那一行（数字键选的就是它）；单行时只画当前页
+        let grid = self.session.grid_cells();
+        let first = self.session.grid.map_or(page, |grid| grid.top()) * size;
+        let (cells, columns) = match &grid {
+            Some((cells, columns)) => (cells.clone(), *columns),
+            None => (self.session.page_cells(), 0),
+        };
+        let rows: Vec<Row> = cells
             .iter()
             .enumerate()
             .map(|(i, cell)| {
+                let offset = i % size;
+                let labelled = columns == 0 || (first + i) / size == page;
+                let index = if labelled {
+                    (offset + 1).to_string()
+                } else {
+                    String::new()
+                };
                 let Some(candidate) = cell.candidate() else {
                     return Row {
-                        index: (i + 1).to_string(),
+                        // 矩阵里的空位什么都不画；单行里的空位留着序号
+                        index: if columns == 0 { index } else { String::new() },
                         text: String::new(),
                         annotation: Vec::new(),
                         cloud: false,
                     };
                 };
-                let mut row = Row::from_candidate(i, candidate);
+                let mut row = Row::from_candidate(offset, candidate);
+                row.index = index;
                 row.cloud = candidate.kind == CandidateKind::Cloud;
                 row
             })
             .collect();
         // 页上的译词告诉 Engine：用户上屏那一刻它们在屏幕上，算「见过」（词汇记录）；窗口收起时传空
-        let cells = self.session.page_cells();
         self.engine
             .note_displayed(cells.iter().copied().filter_map(Cell::candidate));
         // 配置成只在行内显示时，窗口顶部不画拼音行
@@ -117,7 +135,13 @@ impl Host {
         let frame = Frame {
             preedit,
             rows,
-            highlighted: self.session.highlighted.saturating_sub(page * size),
+            highlighted: self.session.highlighted.saturating_sub(first),
+            columns,
+            column_ems: if columns > 0 {
+                qingjian_core::Grid::column_ems(&self.session.layout)
+            } else {
+                Vec::new()
+            },
             footer,
             sentence: self.sentence.clone(),
             status: self.status.clone(),

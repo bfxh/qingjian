@@ -20,6 +20,12 @@ pub const DIGRAPH_INITIALS: [(char, &str); 3] = [('v', "zh"), ('i', "ch"), ('u',
 /// 小浪双拼的翘舌声母：e 为 zh，i 为 ch，v 为 sh。
 pub const XIAOLANG_DIGRAPH_INITIALS: [(char, &str); 3] = [('e', "zh"), ('i', "ch"), ('v', "sh")];
 
+/// 智能 ABC 的翘舌声母：a 为 zh，e 为 ch，v 为 sh。
+pub const ABC_DIGRAPH_INITIALS: [(char, &str); 3] = [('a', "zh"), ('e', "ch"), ('v', "sh")];
+
+/// 首道双拼的翘舌声母：v 为 zh，i 为 ch，e 为 sh。
+pub const SHOUDAO_DIGRAPH_INITIALS: [(char, &str); 3] = [('v', "zh"), ('i', "ch"), ('e', "sh")];
+
 /// 小鹤双拼。
 pub const XIAOHE: Table = Table {
     digraph_initials: &DIGRAPH_INITIALS,
@@ -204,6 +210,57 @@ pub const SOGOU: Table = Table {
     semicolon: true,
 };
 
+/// 智能 ABC 的零声母写法：`o` 加韵母键。不像微软 / 搜狗还认双写元音——`aa` / `ee` 在 ABC 里是 zha / che。
+const ABC_ZERO_INITIALS: &[(&str, &[&str])] = &[
+    ("a", &["oa"]),
+    ("ai", &["ol"]),
+    ("an", &["oj"]),
+    ("ang", &["oh"]),
+    ("ao", &["ok"]),
+    ("e", &["oe"]),
+    ("ei", &["oq"]),
+    ("en", &["of"]),
+    ("eng", &["og"]),
+    ("er", &["or"]),
+    ("o", &["oo"]),
+    ("ou", &["ob"]),
+];
+
+/// 智能 ABC：翘舌声母在 `a` / `e` / `v`（zh / ch / sh），零声母一律 `o` 前缀。
+pub const ABC: Table = Table {
+    digraph_initials: &ABC_DIGRAPH_INITIALS,
+    finals: &[
+        ('q', &["ei"]),
+        ('w', &["ian"]),
+        ('e', &["e"]),
+        ('r', &["iu"]),
+        ('t', &["iang", "uang"]),
+        ('y', &["ing"]),
+        ('u', &["u"]),
+        ('i', &["i"]),
+        ('o', &["uo", "o"]),
+        ('p', &["uan"]),
+        ('a', &["a"]),
+        ('s', &["iong", "ong"]),
+        ('d', &["ia", "ua"]),
+        ('f', &["en"]),
+        ('g', &["eng"]),
+        ('h', &["ang"]),
+        ('j', &["an"]),
+        ('k', &["ao"]),
+        ('l', &["ai"]),
+        ('z', &["iao"]),
+        ('x', &["ie"]),
+        ('c', &["in", "uai"]),
+        ('v', &["v"]),
+        ('b', &["ou"]),
+        ('n', &["un"]),
+        ('m', &["ui", "ve", "ue"]),
+    ],
+    zero_initials: ABC_ZERO_INITIALS,
+    semicolon: false,
+};
+
 /// 小浪双拼。
 pub const XIAOLANG: Table = Table {
     digraph_initials: &XIAOLANG_DIGRAPH_INITIALS,
@@ -248,5 +305,58 @@ pub const XIAOLANG: Table = Table {
         ("o", &["oo"]),
         ("ou", &["ou"]),
     ],
+    semicolon: false,
+};
+
+/// 首道双拼的零声母写法：a / o 开头的双写首字母或照全拼敲（ang 是 `ay`），`e` 键让给了 sh，
+/// 所以 e / ei / eng 改用 `u` 引导；`en` `er` 仍照全拼敲（sh 配不出 ian / ie，不撞）。
+const SHOUDAO_ZERO_INITIALS: &[(&str, &[&str])] = &[
+    ("a", &["aa"]),
+    ("ai", &["ai"]),
+    ("an", &["an"]),
+    ("ang", &["ay"]),
+    ("ao", &["ao"]),
+    ("e", &["ue"]),
+    ("ei", &["ui"]),
+    ("en", &["en"]),
+    ("eng", &["uf"]),
+    ("er", &["er"]),
+    ("o", &["oo"]),
+    ("ou", &["ou"]),
+];
+
+/// 首道双拼：键位按作者公布的键位图（shoudaoshuangpin/shoudaoshouyouplus 的 `shoudao_layout.jpg`）。
+/// ue（jue / que / xue / yue）在 `l`，üe（lve / nve）单独在 `b`。
+pub const SHOUDAO: Table = Table {
+    digraph_initials: &SHOUDAO_DIGRAPH_INITIALS,
+    finals: &[
+        ('q', &["iu"]),
+        ('w', &["ua"]),
+        ('e', &["e"]),
+        ('r', &["ie"]),
+        ('t', &["uan"]),
+        ('y', &["ang"]),
+        ('u', &["u"]),
+        ('i', &["i"]),
+        ('o', &["uo", "o"]),
+        ('p', &["iao"]),
+        ('a', &["a"]),
+        ('s', &["ou"]),
+        ('d', &["ao"]),
+        ('f', &["eng"]),
+        ('g', &["uai", "ing"]),
+        ('h', &["ong", "iong"]),
+        ('j', &["an"]),
+        ('k', &["en", "ia"]),
+        ('l', &["ai", "ue"]),
+        ('z', &["un"]),
+        ('x', &["iang", "uang"]),
+        ('c', &["in"]),
+        ('v', &["ui", "v"]),
+        ('b', &["ve"]),
+        ('n', &["ian"]),
+        ('m', &["ei"]),
+    ],
+    zero_initials: SHOUDAO_ZERO_INITIALS,
     semicolon: false,
 };

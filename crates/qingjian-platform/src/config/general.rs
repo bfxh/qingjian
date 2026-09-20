@@ -37,6 +37,9 @@ pub struct GeneralConfig {
     /// 候选窗口竖排 / 横排。
     pub layout: LayoutMode,
 
+    /// 横排时上 / 下键把单行展开成多行矩阵（左 / 右键改为移动候选高亮，Esc 第一下先收回）。缺省关：横排下的按键与以前一样。只有 macOS 用。
+    pub horizontal_grid: bool,
+
     /// 候选窗口由青简渲染器还是系统原生绘制。
     pub renderer: CandidateRenderer,
 
@@ -80,7 +83,7 @@ pub struct GeneralConfig {
     /// 关则删空即回纯拼音态。
     pub aux_code_keep_empty: bool,
 
-    /// 拼音侧方案：`pinyin`（全拼，缺省）/ `xiaohe` / `ziranma` / `microsoft` / `sogou` / `xiaolang` / `zhuyin`
+    /// 拼音侧方案：`pinyin`（全拼，缺省）/ `xiaohe` / `ziranma` / `microsoft` / `sogou` / `abc` / `xiaolang` / `shoudao` / `zhuyin`
     /// / `none`（关，只用形码），见 [`Scheme`]。用不认识的写法时按全拼并警告。
     /// 缺省是空串：文件里没写这一项时要去看旧键，见 [`Self::scheme`]。
     pub scheme: String,
@@ -117,6 +120,7 @@ impl Default for GeneralConfig {
             page_keys: PAGE_KEY_OPTIONS[0].to_owned(),
             theme: ThemeMode::default(),
             layout: LayoutMode::default(),
+            horizontal_grid: false,
             renderer: CandidateRenderer::default(),
             font: String::new(),
             preedit: PreeditMode::default(),
@@ -259,6 +263,15 @@ impl GeneralConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn horizontal_grid_is_off_unless_switched_on() {
+        assert!(!GeneralConfig::default().horizontal_grid);
+        let general: GeneralConfig = toml::from_str("layout = \"horizontal\"\n").unwrap();
+        assert!(!general.horizontal_grid);
+        let general: GeneralConfig = toml::from_str("horizontal_grid = true\n").unwrap();
+        assert!(general.horizontal_grid);
+    }
 
     #[test]
     fn page_size_and_keys_are_sanitized() {

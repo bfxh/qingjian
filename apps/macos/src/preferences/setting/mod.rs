@@ -107,6 +107,9 @@ pub enum Setting {
     /// `[general] chinese_first`，勾选框：中英混输时中文候选排在英文词前。
     ChineseFirst,
 
+    /// `[general] horizontal_grid`，勾选框：横排时上 / 下键展开成多行矩阵。
+    HorizontalGrid,
+
     /// `[general] shift_letter`，勾选框：中文模式下 Shift+字母进组句（勾上是 compose，否则 passthrough）。
     ShiftLetter,
 
@@ -137,7 +140,7 @@ pub enum Setting {
     /// `[general] wubi`，勾选框：勾上是五笔（86 版）。与拼音同时开着就是混输。
     Wubi,
 
-    /// [general] traditional，勾选框：繁体输出。
+    /// `[general] traditional`，勾选框：繁体输出。
     Traditional,
 
     /// `[general] log_level`，勾选框：勾上是 debug。
@@ -200,6 +203,7 @@ impl Setting {
             Self::EnglishCandidates => 14,
             Self::ChineseFirst => 42,
             Self::ShiftLetter => 50,
+            Self::HorizontalGrid => 51,
             Self::TranslationKeys => 15,
             Self::TranslationSecondKeys => 16,
             Self::TranslateSelectionKeys => 17,
@@ -260,6 +264,7 @@ impl Setting {
             14 => Self::EnglishCandidates,
             42 => Self::ChineseFirst,
             50 => Self::ShiftLetter,
+            51 => Self::HorizontalGrid,
             15 => Self::TranslationKeys,
             16 => Self::TranslationSecondKeys,
             17 => Self::TranslateSelectionKeys,
@@ -349,6 +354,7 @@ mod tests {
             Setting::InputLog,
             Setting::SystemTextReplacements,
             Setting::ShiftLetter,
+            Setting::HorizontalGrid,
             Setting::ClearInputLog,
             Setting::TestCloud,
             Setting::OpenWebsite,

@@ -1,9 +1,12 @@
 {
+  "apps/linux/server/src/ipc/connection.rs": 1,
+  "apps/linux/server/src/ipc/mod.rs": 2,
+  "apps/linux/server/src/main.rs": 1,
   "apps/macos/src/app/input_source.rs": 7,
   "apps/macos/src/candidates/bitmap/font_files.rs": 3,
   "apps/macos/src/candidates/bitmap/mod.rs": 2,
   "apps/macos/src/candidates/cloud_icon.rs": 1,
-  "apps/macos/src/candidates/view.rs": 5,
+  "apps/macos/src/candidates/view/mod.rs": 5,
   "apps/macos/src/candidates/window.rs": 1,
   "apps/macos/src/host/cloud/predict_monitor.rs": 2,
   "apps/macos/src/host/cloud/test_monitor.rs": 2,

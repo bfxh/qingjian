@@ -37,6 +37,13 @@ impl Host {
         self.apps = config.apps.clone();
         self.window.set_theme(config.general.theme);
         self.window.set_layout(config.general.layout);
+        if self.layout != config.general.layout
+            || self.horizontal_grid != config.general.horizontal_grid
+        {
+            self.layout = config.general.layout;
+            self.horizontal_grid = config.general.horizontal_grid;
+            self.session.collapse();
+        }
         self.window.set_font(&config.general.font);
         self.window.set_renderer(config.general.renderer);
         self.apply_learning_language(&config.general);

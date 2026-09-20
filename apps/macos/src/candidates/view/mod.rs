@@ -3,6 +3,8 @@
 //! 有两条画法：缺省交给 `qingjian-render` 出位图再贴（[`BitmapPainter`]），配置 `[general] renderer = "system"`
 //! 走下面用 AppKit 逐项绘制的旧路径（过渡期的退路，渲染器稳定一个版本后删）。
 
+mod matrix;
+
 use std::cell::{Cell, RefCell};
 
 use objc2::rc::Retained;
@@ -121,6 +123,9 @@ impl CandidateView {
             bitmap: RefCell::new(None),
             font: RefCell::new(String::new()),
         });
+        // SAFETY: `initWithFrame:` 是 NSView 的指定初始化器，选择器与签名由 `define_class!`
+        // 在编译期对齐；`this` 由 `alloc` + `set_ivars` 得到、尚未被别名共享，传 `NSRect::ZERO`
+        // 与声明一致，返回的是 init 族的 +1 引用（`Retained<Self>` 接管所有权）。
         unsafe { msg_send![super(this), initWithFrame: NSRect::ZERO] }
     }
 
@@ -202,6 +207,7 @@ impl CandidateView {
         let (top_width, top_height) = self.top_line_size(&frame);
         let (body_width, body_height) = match self.ivars().layout.get() {
             LayoutMode::Vertical => self.vertical_size(&frame),
+            LayoutMode::Horizontal if frame.columns > 0 => self.matrix_size(&frame),
             LayoutMode::Horizontal => self.horizontal_size(&frame),
         };
         let width = top_width.max(body_width);
@@ -390,6 +396,7 @@ impl CandidateView {
         y += self.draw_top_line(&frame, y);
         match self.ivars().layout.get() {
             LayoutMode::Vertical => self.draw_vertical(&frame, y, bounds),
+            LayoutMode::Horizontal if frame.columns > 0 => self.draw_matrix(&frame, y, bounds),
             LayoutMode::Horizontal => self.draw_horizontal(&frame, y, bounds),
         }
     }
