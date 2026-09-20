@@ -1,10 +1,11 @@
-//! 显示器工作区查询，候选窗口与状态条共用。
+//! 显示器工作区与 DPI 查询，候选窗口与状态条共用。
 
-use windows::Win32::Foundation::{POINT, RECT};
+use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY, MONITOR_FROM_FLAGS,
-    MONITORINFO, MonitorFromPoint,
+    GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
+    MONITOR_FROM_FLAGS, MONITORINFO, MonitorFromPoint, MonitorFromWindow,
 };
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 
 /// `point` 所在（最近）显示器的工作区。
 pub(super) fn work_area_near(point: POINT) -> RECT {
@@ -36,4 +37,21 @@ fn work_area(point: POINT, flags: MONITOR_FROM_FLAGS) -> RECT {
             bottom: i32::MAX,
         }
     }
+}
+
+/// `point` 所在（最近）显示器的有效 DPI；拿不到返回 0。
+pub(super) fn dpi_at(point: POINT) -> u32 {
+    dpi_of(unsafe { MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST) })
+}
+
+/// 窗口所在（最近）显示器的有效 DPI；拿不到返回 0。
+pub(super) fn dpi_at_window(hwnd: HWND) -> u32 {
+    dpi_of(unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) })
+}
+
+fn dpi_of(monitor: HMONITOR) -> u32 {
+    let mut x = 0;
+    let mut y = 0;
+    let ok = unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut x, &mut y) }.is_ok();
+    if ok && x > 0 { x } else { 0 }
 }

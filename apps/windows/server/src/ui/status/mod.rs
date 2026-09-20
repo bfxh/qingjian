@@ -16,7 +16,7 @@ use windows::Win32::Foundation::{
     COLORREF, E_INVALIDARG, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM,
 };
 use windows::Win32::Graphics::Gdi::{GetDC, HDC, ReleaseDC, SetBkMode, TRANSPARENT};
-use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
+use windows::Win32::UI::HiDpi::GetDpiForSystem;
 use windows::Win32::UI::Input::KeyboardAndMouse::{DragDetect, ReleaseCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, HTCAPTION, HTCLIENT, IDC_HAND,
@@ -140,7 +140,7 @@ impl StatusBar {
 
     /// DPI 或深浅变了就重建主题。
     fn sync_theme(&self) {
-        let dpi = match unsafe { GetDpiForWindow(self.hwnd) } {
+        let dpi = match monitor::dpi_at_window(self.hwnd) {
             0 => self.dpi.get(),
             dpi => dpi,
         };

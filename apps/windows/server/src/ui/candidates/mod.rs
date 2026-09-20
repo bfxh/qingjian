@@ -116,7 +116,7 @@ impl CandidateWindow {
 
     /// 按光标矩形定位并显示：贴光标下方（放不下放上方），四周留出阴影。
     pub(crate) fn show(&self, anchor: RECT) {
-        self.sync_theme();
+        self.sync_theme(anchor);
         let rendered = {
             let data = self.data.borrow();
             self.painter.borrow_mut().as_mut().and_then(|painter| {
@@ -185,11 +185,19 @@ impl CandidateWindow {
     }
 
     /// DPI 或深浅变了就重建主题；每次 `show` 前调。
-    fn sync_theme(&self) {
-        let dpi = match unsafe { GetDpiForWindow(self.hwnd) } {
-            0 => self.dpi.get(),
-            dpi => dpi,
-        };
+    /// DPI 按光标所在显示器取：候选窗永远贴光标，而显示器切换（睡眠唤醒、内外屏交替亮起的瞬间）
+    /// 会让窗口坐标落在失效或错误的显示器上，`GetDpiForWindow` 会取回错值并缓存；光标位置才可靠。
+    fn sync_theme(&self, anchor: RECT) {
+        let mut dpi = monitor::dpi_at(POINT {
+            x: anchor.left,
+            y: anchor.top,
+        });
+        if dpi == 0 {
+            dpi = match unsafe { GetDpiForWindow(self.hwnd) } {
+                0 => self.dpi.get(),
+                dpi => dpi,
+            };
+        }
         let dark = resolve_dark(self.data.borrow().theme_mode);
         if dpi != self.dpi.get() || dark != self.dark.get() {
             self.data.borrow_mut().theme = Rc::new(Theme::new(dpi, dark));
