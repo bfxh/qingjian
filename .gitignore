@@ -7,3 +7,5 @@
 /logs
 /data
 .playwright-mcp/
+# Secrets scan 失败时写的报告（CI 在临时 runner 上；本地复现会留在仓库根，别误提交）
+/gitleaks.json
