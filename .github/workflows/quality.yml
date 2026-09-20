@@ -24,6 +24,8 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           # 与 .githooks/commit-msg 同一套类型与范围（docs/contributing.md「提交信息」）
           types: |
@@ -85,16 +87,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # gitleaks-action 2026 起对组织仓库要求商业 license（GITLEAKS_LICENSE）；改用 OSS CLI 直接扫全历史
+      - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
+        with:
+          tool: gitleaks
+
+      - name: Scan full history
+        run: gitleaks git --exit-code=1 --log-opts="--all" --redact
 
   todos:
     name: TODO / FIXME sweep

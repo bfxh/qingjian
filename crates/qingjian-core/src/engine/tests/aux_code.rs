@@ -1,4 +1,5 @@
 //! 辅码态：触发消歧、逐键即筛、删码回退、上屏收尾与 preedit 分段。
+#![allow(clippy::panic)] // 测试断言用 panic!（workspace lints 锁死生产 panic）
 
 use qingjian_dictionary::AuxCodeTable;
 
