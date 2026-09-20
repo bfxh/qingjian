@@ -10,7 +10,11 @@ use windows::core::BOOL;
 use qingjian_platform::protocol::ScreenRect;
 
 /// 只看测量结果，失败给 `None`——回退策略（缓存上次有效位置 / 鼠标）由调用方决定（`report_caret`）。
-pub(crate) fn measure_anchor(context: &ITfContext, ec: u32, range: &ITfRange) -> Option<ScreenRect> {
+pub(crate) fn measure_anchor(
+    context: &ITfContext,
+    ec: u32,
+    range: &ITfRange,
+) -> Option<ScreenRect> {
     range_rect(context, ec, range).map(to_screen)
 }
 

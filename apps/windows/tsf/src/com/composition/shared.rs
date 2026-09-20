@@ -66,7 +66,7 @@ impl Shared {
     }
 
     pub(crate) fn anchor_cache(&self) -> Option<ScreenRect> {
-        self.anchor_cache.borrow().clone()
+        *self.anchor_cache.borrow()
     }
 
     pub(crate) fn set_anchor_cache(&self, value: Option<ScreenRect>) {
