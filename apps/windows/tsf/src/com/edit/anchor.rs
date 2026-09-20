@@ -9,18 +9,14 @@ use windows::core::BOOL;
 
 use qingjian_platform::protocol::ScreenRect;
 
-/// `range` 的屏幕矩形，拿不到（有些应用给全零 / 空矩形）退到鼠标处。
-pub(crate) fn anchor_rect(context: &ITfContext, ec: u32, range: &ITfRange) -> ScreenRect {
-    to_screen(range_rect(context, ec, range).unwrap_or_else(mouse_anchor))
+/// 只看测量结果，失败给 `None`——回退策略（缓存上次有效位置 / 鼠标）由调用方决定（`report_caret`）。
+pub(crate) fn measure_anchor(context: &ITfContext, ec: u32, range: &ITfRange) -> Option<ScreenRect> {
+    range_rect(context, ec, range).map(to_screen)
 }
 
-/// 插入点（没有选区时是光标，有选区时是选区）的屏幕矩形。「只在候选窗口」模式应用里不放 marked text，
-/// 没有组句范围可量，就用它给候选窗口定位。
-pub(crate) fn caret_rect(context: &ITfContext, ec: u32) -> ScreenRect {
-    match selection_range(context, ec) {
-        Some(range) => anchor_rect(context, ec, &range),
-        None => mouse_screen_rect(),
-    }
+/// 同上：插入点的测量，没选区 / 量不到都是 `None`。
+pub(crate) fn measure_caret(context: &ITfContext, ec: u32) -> Option<ScreenRect> {
+    selection_range(context, ec).and_then(|range| measure_anchor(context, ec, &range))
 }
 
 /// 当前选区的范围；`GetSelection` 移交所有权，由调用方释放。

@@ -3,6 +3,8 @@ use std::rc::Rc;
 
 use windows::Win32::UI::TextServices::{ITfComposition, ITfContext};
 
+use qingjian_platform::protocol::ScreenRect;
+
 use crate::com::service::SharedClient;
 
 /// `TextService`、编辑会话、组句 sink、轮询定时器之间共享的组句状态（STA 单线程，`Rc` 传递）。
@@ -29,6 +31,11 @@ pub(crate) struct Shared {
     /// 本线程当前有键盘焦点（`OnSetFocus`）；轮询定时器只在前台时问状态条的切模式请求。
     foreground: Cell<bool>,
 
+    /// 最近一次量到的候选锚点矩形（`report_caret` 缓存）。#167：GetTextExt 失败的应用（Firefox 等）
+    /// 候选窗会回退到鼠标位置、跟着鼠标跑；光标在输入框内本来就不会动，失败时用缓存位置最稳。
+    /// 前台变化 / reset 时清掉，避免沿用上一个输入框的位置。
+    anchor_cache: RefCell<Option<ScreenRect>>,
+
     /// 与 `TextService` 共用的引擎客户端；DLL 侧结束组句时要通知 Server 收候选窗口（它无从知晓）。
     client: SharedClient,
 }
@@ -43,6 +50,7 @@ impl Shared {
             last_context: RefCell::new(None),
             server_stale: Cell::new(false),
             foreground: Cell::new(false),
+            anchor_cache: RefCell::new(None),
             client,
         })
     }
@@ -52,7 +60,17 @@ impl Shared {
     }
 
     pub(crate) fn set_foreground(&self, value: bool) {
+        // 前台变化 = 焦点换了输入框 / 换掉了：上一次的位置不能继续用
+        *self.anchor_cache.borrow_mut() = None;
         self.foreground.set(value);
+    }
+
+    pub(crate) fn anchor_cache(&self) -> Option<ScreenRect> {
+        self.anchor_cache.borrow().clone()
+    }
+
+    pub(crate) fn set_anchor_cache(&self, value: Option<ScreenRect>) {
+        *self.anchor_cache.borrow_mut() = value;
     }
 
     pub(crate) fn last_context(&self) -> Option<ITfContext> {
@@ -132,6 +150,7 @@ impl Shared {
     pub(crate) fn reset(&self) {
         self.set_composition(None);
         self.set_last_context(None);
+        self.set_anchor_cache(None);
         self.end_composing();
     }
 

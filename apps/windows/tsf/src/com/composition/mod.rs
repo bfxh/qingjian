@@ -14,11 +14,11 @@ use windows::Win32::UI::TextServices::{
 };
 use windows::core::{Interface, Result};
 
-use qingjian_platform::protocol::{Frame, PreeditKind};
+use qingjian_platform::protocol::{Frame, PreeditKind, ScreenRect};
 
 pub(crate) use self::shared::Shared;
 use self::sink::CompositionSink;
-use super::edit::{InputContext, anchor_rect, caret_rect, input_context};
+use super::edit::{InputContext, input_context, measure_anchor, measure_caret, mouse_screen_rect};
 use super::service::SharedClient;
 
 /// 内联要显示的拼音行（跳过被纠错划掉的原字母）；空串表示没有组句内容。
@@ -91,16 +91,34 @@ fn report_surrounding(engine: &SharedClient, before: String) {
 
 /// 组句进行中才报位置；组句已收 Server 会按空帧 / `Commit` 自行收窗口。
 fn report_caret(shared: &Shared, engine: &SharedClient, context: &ITfContext, ec: u32) {
-    let rect = match shared.composition() {
+    let measured: Option<ScreenRect> = match shared.composition() {
         Some(composition) => {
             let Ok(range) = (unsafe { composition.GetRange() }) else {
                 return;
             };
-            anchor_rect(context, ec, &range)
+            measure_anchor(context, ec, &range)
         }
         // 「只在候选窗口」模式应用里不放行内拼音：没有组句范围可量，量插入点。
-        None if shared.composing() => caret_rect(context, ec),
+        None if shared.composing() => measure_caret(context, ec),
         None => return,
+    };
+    // #167：GetTextExt 失败（Firefox 一类）时不要立刻落鼠标——光标在输入框内不会动，
+    // 用上次量到的位置最稳；一次都没量过才回退鼠标。
+    let rect = match measured {
+        Some(rect) => {
+            shared.set_anchor_cache(Some(rect));
+            rect
+        }
+        None => match shared.anchor_cache() {
+            Some(cached) => {
+                super::log::log("候选锚点：本次量不到，沿用缓存位置");
+                cached
+            }
+            None => {
+                super::log::log("候选锚点：本次量不到且无缓存，回退鼠标");
+                mouse_screen_rect()
+            }
+        },
     };
     // 引擎正被别处借着（罕见）就跳过这拍，Server 保持上次位置。
     if let Ok(mut guard) = engine.try_borrow_mut()

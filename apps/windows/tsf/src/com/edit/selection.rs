@@ -10,7 +10,7 @@ use windows::core::{Result, implement};
 
 use qingjian_platform::protocol::ScreenRect;
 
-use super::anchor::{anchor_rect, mouse_screen_rect, selection_range};
+use super::anchor::{measure_anchor, mouse_screen_rect, selection_range};
 use crate::com::composition::Shared;
 use crate::com::log::log;
 use crate::com::service::SharedClient;
@@ -73,7 +73,7 @@ fn read_selection(context: &ITfContext, ec: u32) -> (String, ScreenRect) {
     let Some(range) = selection_range(context, ec) else {
         return (String::new(), mouse_screen_rect());
     };
-    let rect = anchor_rect(context, ec, &range);
+    let rect = measure_anchor(context, ec, &range).unwrap_or_else(mouse_screen_rect);
     (range_text(&range, ec), rect)
 }
 
