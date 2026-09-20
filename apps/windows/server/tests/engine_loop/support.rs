@@ -1,4 +1,5 @@
 //! 各模块共用的零件：造 Router、造按键、拆回话、假的状态条与打分器。
+#![allow(clippy::panic)]
 
 pub use std::path::PathBuf;
 pub use std::sync::{Arc, Mutex};

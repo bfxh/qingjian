@@ -38,5 +38,36 @@ allow = [
 ]
 
 [bans]
-# windows-rs 一家（0.62 / 0.100 / 0.3）等多版本并存是合法的，不拦死；但出现新的重复版本要亮出来看
-multiple-versions = "warn"
+# 重复版本一律红，除非在 skip 里登记了理由（2026-09-20 实测清单，新增重复必须进登记）
+multiple-versions = "deny"
+skip = [
+    # windows-rs 一家：0.62（Server/TSF 主线）与 0.100（windows-core 等新代）并存是依赖现实，全家一起升（dependabot 合成）
+    { name = "windows-collections", version = "0.100.0", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-collections", version = "0.3.2", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-core", version = "0.100.0", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-core", version = "0.62.2", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-future", version = "0.100.0", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-future", version = "0.3.2", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-link", version = "0.100.0", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-link", version = "0.2.1", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-numerics", version = "0.100.0", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-numerics", version = "0.3.1", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-result", version = "0.100.0", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-result", version = "0.4.1", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-strings", version = "0.100.0", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-strings", version = "0.5.1", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-threading", version = "0.100.0", reason = "windows-rs 下一代与 0.62 主线并存" },
+    { name = "windows-threading", version = "0.2.1", reason = "windows-rs 下一代与 0.62 主线并存" },
+    # 其余转正 / 双包的版本对（2026-09-20 实测）：图谱里 genuinely 并存，升级时逐个收敛
+    { name = "base64", reason = "0.13/0.22/0.23 三代并存（protocol 新旧 + 工具链）" },
+    { name = "font-types", reason = "cosmic-text 字族两代并存" },
+    { name = "getrandom", reason = "0.3/0.4 两代并存" },
+    { name = "hashbrown", reason = "0.16/0.17 两代并存" },
+    { name = "miniz_oxide", reason = "0.8/0.9 两代并存" },
+    { name = "r-efi", reason = "UEFI 引导段 5.x/6.x 两代并存" },
+    { name = "read-fonts", reason = "cosmic-text 字族两代并存" },
+    { name = "skrifa", reason = "cosmic-text 字族两代并存" },
+    { name = "syn", reason = "2.x/3.x 两代并存（宏生态）" },
+    { name = "thiserror", reason = "1.x/2.x 两代并存" },
+    { name = "thiserror-impl", reason = "1.x/2.x 两代并存" },
+]

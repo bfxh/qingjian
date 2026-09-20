@@ -14,6 +14,7 @@ pub struct Line {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic)]
 mod tests {
     use super::*;
     use qingjian_core::InputSource;

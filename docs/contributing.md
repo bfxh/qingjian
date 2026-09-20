@@ -67,7 +67,7 @@
 ## 提交前检查
 
 - 钩子：`.githooks/pre-commit`（禁装饰性分隔注释 + fmt + clippy）、`.githooks/commit-msg`（提交信息格式）、`.githooks/pre-push`（全 workspace 测试）；`git config core.hooksPath .githooks` 启用一次。
-- 代码里不出现 `dbg!` / `todo!` / `unimplemented!`（workspace lints 锁死）；新增 `unsafe` 先读 `docs/review/unsafe-audit.md`，登记清单并同步基线。
+- 代码里不出现 `dbg!` / `todo!` / `unimplemented!` / `panic!` / `unreachable!`（workspace lints 锁死，测试里用 `#[allow(clippy::panic)]` 显式豁免）；注释与文档不留 `TODO` / `FIXME` / `HACK` / `XXX`（`scripts/detect_todos.py`，pre-commit 与 CI 都跑）；新增 `unsafe` 先读 `docs/review/unsafe-audit.md`，登记清单并同步基线。
   两个跑编译的钩子按 `uname` 划平台范围：**非 Apple 平台排除 `qingjian-macos`**（IMK 壳依赖 objc2，在别的平台上是硬 `compile_error!`，
   排除不掉就整条命令失败），与 [ci.yml](../.github/workflows/ci.yml) 三个 job 的划分一致；Windows 上 pre-push 另设 `QINGJIAN_UIACCESS=0`
   （Server 的 build.rs 嵌 uiAccess manifest，没签名的测试二进制起不来，os error 740）。
@@ -76,8 +76,8 @@
 ## CI 与发版
 
 - CI：ci.yml 三个 job（Linux 全量含文档门 / macOS 壳 / Windows 三 crate）都 `--locked`；quality.yml 在 PR 与 main 上跑质量门：
-  PR 标题规范（与提交信息钩子同一套类型与范围）、依赖许可证与已知漏洞（cargo-deny，根目录 `deny.toml`）、秘密扫描（gitleaks）、仓库卫生（垃圾文件）、unsafe 增量门（对照 `docs/review/unsafe-baseline.json`）、大 PR 提醒（>1200 行会留言建议拆分）。
-  Dependabot 升 actions；audit.yml 每周 rustsec + 全 workspace 覆盖率（llvm-cov，产物留 artifact）。
+  PR 标题规范（与提交信息钩子同一套类型与范围）、依赖许可证与已知漏洞（cargo-deny，根目录 `deny.toml`）、秘密扫描（gitleaks）、仓库卫生（垃圾文件）、unsafe 增量门（对照 `docs/review/unsafe-baseline.json`）、TODO/FIXME 残留扫描、大 PR 提醒（>1200 行会留言建议拆分）。
+  Dependabot 升 actions；audit.yml 每周 rustsec + 全 workspace 覆盖率（llvm-cov）+ 核心 crate 的 Miri UB 检测（均留 artifact / 不挡 PR）。
 - 发版：推 `<平台>-v<版本>` 标签触发 `release.yml`，门禁是版本号 = 标签且不带 -dev、标签在 main 上、产品数据按 SHA256SUMS 校验。
 - CHANGELOG 手写、发版时由维护者统一改（PR 不动它）。流程与 Secrets 见 [notes/release.md](notes/release.md)。
 

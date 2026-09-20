@@ -4,6 +4,7 @@
 //!
 //! 用 `UnixStream::pair` 起真双工流，所以只在 Unix 跑（mac 上开发时能验证 client 编排）；Windows 上
 //! 同一套 [`EngineClient`] 由命名管道驱动，靠交互测试。样例词库来自 `assets/sample/`，无需产品数据。
+#![allow(clippy::panic)]
 #![cfg(unix)]
 
 use std::os::unix::net::UnixStream;

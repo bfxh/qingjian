@@ -215,6 +215,7 @@ impl fmt::Display for Scheme {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic)]
 mod tests {
     use super::*;
 

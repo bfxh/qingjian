@@ -1,4 +1,5 @@
 //! 传输层测试：帧编解码，以及在内存流上跑 serve 循环；不碰命名管道，跨平台可跑。
+#![allow(clippy::panic)]
 
 use std::io::{Cursor, Read, Write};
 use std::path::PathBuf;

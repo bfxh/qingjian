@@ -1,4 +1,5 @@
 //! Tab 与分页的三端约定；直接注入整句补全状态，不接云服务。
+#![allow(clippy::panic)]
 use crate::dispatch::{Router, RouterConfig};
 use qingjian_core::{CustomPhrase, Engine};
 use qingjian_dictionary::{Dictionary, WordList};

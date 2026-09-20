@@ -1,4 +1,5 @@
 //! 学习、撤销、统计、日志、释义与词汇。
+#![allow(clippy::panic)]
 
 use super::*;
 

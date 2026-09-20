@@ -22,10 +22,13 @@ repository = "https://github.com/qingjian-team/qingjian"
 
 [workspace.lints.clippy]
 all = "warn"
-# 审核硬门：调试残留 / 未落地 TODO 不允许进仓（存量清零后锁死，见 docs/contributing.md「提交前检查」）
+# 审核硬门：调试残留 / 未落地标记 / 直接 panic 不允许进仓（存量清零后锁死，见 docs/contributing.md「提交前检查」）；
+# 测试里的 panic! 在各测试文件用 #[allow(clippy::panic)] 显式豁免
 dbg_macro = "deny"
 todo = "deny"
 unimplemented = "deny"
+panic = "deny"
+unreachable = "deny"
 
 [workspace.dependencies]
 # 内部 crate

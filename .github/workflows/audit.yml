@@ -27,6 +27,25 @@ jobs:
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+  miri:
+    # 每周一 + 手动：核心 crate 用 Miri 做未定义行为检测（UB）——unsafe 都集中在 format 的 mmap 视图，
+    # core 侧跑 Miri 兜住数据流错误；成本高，不作 PR 门
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: nightly
+          components: miri
+
+      - name: Miri (UB check on core)
+        run: cargo miri test -p qingjian-core --lib --locked
+
   coverage:
     # 每周一 + 手动：全 workspace 行覆盖率（llvm-cov），产物留 artifact，不上传第三方
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
