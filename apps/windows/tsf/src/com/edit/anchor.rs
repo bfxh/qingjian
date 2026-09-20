@@ -46,11 +46,23 @@ pub(crate) fn mouse_screen_rect() -> ScreenRect {
 fn range_rect(context: &ITfContext, ec: u32, range: &ITfRange) -> Option<RECT> {
     let mut rect = RECT::default();
     let mut clipped = BOOL(0);
-    unsafe {
-        let view = context.GetActiveView().ok()?;
-        view.GetTextExt(ec, range, &mut rect, &mut clipped).ok()?;
+    let view = unsafe { context.GetActiveView() }.ok()?;
+    let status = unsafe { view.GetTextExt(ec, range, &mut rect, &mut clipped) };
+    if let Err(error) = status {
+        // #167：Firefox 这类应用 GetTextExt 会失败 / 返回退化矩形，这里记下原因，
+        // 看日志就能分清是「应用报错」还是「回了全零矩形」，再决定回退策略。
+        crate::com::log::log(&format!("候选锚点：GetTextExt 失败 {error}，回退鼠标"));
+        return None;
     }
-    (rect.right > rect.left || rect.bottom > rect.top).then_some(rect)
+    if rect.right > rect.left || rect.bottom > rect.top {
+        Some(rect)
+    } else {
+        crate::com::log::log(&format!(
+            "候选锚点：GetTextExt 退化矩形 ({},{},{},{})，回退鼠标",
+            rect.left, rect.top, rect.right, rect.bottom
+        ));
+        None
+    }
 }
 
 fn mouse_anchor() -> RECT {

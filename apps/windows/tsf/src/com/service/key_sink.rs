@@ -226,7 +226,10 @@ impl TextService_Impl {
         // 带 Ctrl / Alt / Win 的组合（翻译保留键）放行时仍交还应用，别把热键的字母插进文档。
         let insertable = !event.modifiers.has_command_key();
         match (next, passthrough_char) {
-            // 放行 + 没在组句 + 可打印字符：输入法插入，吃掉；Server 顺带交出的英文直输段字母拼在前面。
+            // 放行 + 没在组句 + 可打印字符：缺省交回应用（系统按 WM_CHAR 上屏）。
+            // 只有 Server 真的交了 commit（英文直输段收尾）才由输入法补插——企微 / 微信 / notepad++ 会丢那种字符。
+            // 会话外的数字 / 标点在这之前一律走输入法自插：`ITfInsertAtSelection` 在 telegram 的自绘输入框里
+            // 不生效（#168，日志里表现为 consumed=false 且 preedit 为空，字符却上不了屏），改成交回应用。
             (
                 Next::Document {
                     consumed: false,
@@ -235,10 +238,19 @@ impl TextService_Impl {
                 },
                 Some(c),
             ) if insertable && preedit.is_empty() => {
-                let mut text = commit.unwrap_or_default();
-                text.push(c);
-                self.update_document(pic, Some(text), String::new());
-                true
+                let commit = commit.unwrap_or_default();
+                if commit.is_empty() {
+                    log(&format!(
+                        "会话外放行交回应用 vk={} char={c:?}",
+                        event.virtual_key
+                    ));
+                    false
+                } else {
+                    let mut text = commit;
+                    text.push(c);
+                    self.update_document(pic, Some(text), String::new());
+                    true
+                }
             }
             // 放行的功能键：Server 没动缓冲区，交还应用（应用处理这个键时光标可能会移）。
             (
