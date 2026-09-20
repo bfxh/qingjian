@@ -365,6 +365,7 @@ impl UserNgram {
                     .or_default()
                     .entry((*previous).to_owned())
                     .or_default(),
+                #[allow(clippy::unreachable)] // len 在上面被限定为 1..=2，这里不可达；保留字面表达
                 _ => unreachable!(),
             };
             *slot.entry(word.to_owned()).or_default() += count;

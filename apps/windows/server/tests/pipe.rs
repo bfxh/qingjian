@@ -1,6 +1,5 @@
 //! 真命名管道的端到端测试（仅 Windows）：监听线程 + 文件句柄客户端，走完「开会话 → 敲 nihao → 收候选」。
 #![allow(clippy::panic)]
-
 #![cfg(windows)]
 
 use std::fs::OpenOptions;
