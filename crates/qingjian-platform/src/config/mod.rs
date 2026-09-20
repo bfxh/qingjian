@@ -202,6 +202,9 @@ page_keys = "[]"
 theme = "system"
 # 候选窗口排布：vertical 竖排 / horizontal 横排（横排只给高亮候选显示译文）
 layout = "vertical"
+# 横排时 ↑ / ↓ 把单行展开成 6 行矩阵并换行（一行一页候选），← / → 改为在候选之间移动（拼音光标用 ⌥←/→、⌘←/→），
+# Esc 第一下先收回单行。缺省 false：横排下 ↑ / ↓ 逐个移动高亮、← / → 移动拼音光标，与以前一样。只有 macOS 用
+horizontal_grid = false
 # 候选窗口由谁绘制：qingjian 青简渲染器（各平台一致，主题走它）/ system 系统原生绘制（渲染器有问题时的退路）
 renderer = "qingjian"
 # 候选窗口字体（字族名，如 "LXGW WenKai"）；空为系统字体。只对青简渲染器生效，没装这个字体时自动回到系统字体
@@ -425,10 +428,15 @@ impl Config {
                 });
             }
         };
-        toml::from_str(&source).map_err(|source| ConfigError::Parse {
+        let config: Self = toml::from_str(&source).map_err(|source| ConfigError::Parse {
             path: path.to_owned(),
             source: Box::new(source),
-        })
+        })?;
+        // 配置或环境变量里的密钥登记给日志掩码；各进程都从这里加载配置，登记在这一处就够
+        if let Some(key) = config.predict.resolve_api_key() {
+            crate::logs::secrets::register(&key);
+        }
+        Ok(config)
     }
 
     /// 原地改一个布尔键，见 [`Self::set_value`]。

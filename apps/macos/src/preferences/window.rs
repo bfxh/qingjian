@@ -2,7 +2,9 @@
 
 use objc2::MainThreadMarker;
 use objc2::rc::Retained;
-use objc2_app_kit::{NSColor, NSTabView, NSTabViewItem, NSTextField, NSView};
+use objc2_app_kit::{
+    NSClipView, NSColor, NSScreen, NSScrollView, NSTabView, NSTabViewItem, NSTextField, NSView,
+};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 use qingjian_core::{Language, UsageSummary, VocabularySummary};
 use qingjian_platform::Config;
@@ -24,6 +26,9 @@ const MIN_PAGE_HEIGHT: f64 = 250.0;
 /// 标签视图四周留白、底部状态行高度。
 const TAB_MARGIN: f64 = 14.0;
 const STATUS_HEIGHT: f64 = 18.0;
+
+/// 窗口比屏幕可用高度至少矮这么多（标题栏 + 上下留一点边）；页面比窗口高时自己滚。
+const SCREEN_MARGIN: f64 = 80.0;
 
 /// 设置窗口与需要按配置刷新的各页。
 pub struct PreferencesWindow {
@@ -122,10 +127,12 @@ impl PreferencesWindow {
         pages.push(page("关于", layout));
 
         // 标签视图：先用临时尺寸量出边框与标签栏占多少，再按最高的一页定最终尺寸
-        let page_height = pages
+        let tallest = pages
             .iter()
             .map(|(_, layout, _)| layout.height() + PAGE_TOP)
             .fold(MIN_PAGE_HEIGHT, f64::max);
+        // 设置项多了以后最高的一页会超出小屏幕，窗口底部（状态行）掉到程序坞后面：窗口封顶，超高的页放进滚动视图
+        let page_height = tallest.min(max_page_height(mtm)).max(MIN_PAGE_HEIGHT);
         let probe = NSRect::new(NSPoint::ZERO, NSSize::new(PAGE_WIDTH, page_height));
         let tabs = NSTabView::initWithFrame(mtm.alloc(), probe);
         let inner = tabs.contentRect();
@@ -141,15 +148,20 @@ impl PreferencesWindow {
             tabs_size,
         ));
         for (title, layout, view) in pages {
+            let own_height = (layout.height() + PAGE_TOP).max(page_height);
             view.setFrame(NSRect::new(
                 NSPoint::ZERO,
-                NSSize::new(PAGE_WIDTH, page_height),
+                NSSize::new(PAGE_WIDTH, own_height),
             ));
-            layout.finish(&view, page_height);
+            layout.finish(&view, own_height);
             // SAFETY: identifier 允许为空；条目随 NSTabView 活着
             let item = unsafe { NSTabViewItem::initWithIdentifier(mtm.alloc(), None) };
             item.setLabel(&NSString::from_str(title));
-            item.setView(Some(&view));
+            if own_height > page_height {
+                item.setView(Some(&scrolling(mtm, &view, page_height, own_height)));
+            } else {
+                item.setView(Some(&view));
+            }
             tabs.addTabViewItem(&item);
         }
         let content = NSView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::ZERO, content_size));
@@ -259,4 +271,33 @@ impl PreferencesWindow {
             .setTextColor(Some(&NSColor::secondaryLabelColor()));
         self.status.setStringValue(&NSString::from_str(text));
     }
+}
+
+/// 一页最高能多高：主屏可用高度减去标题栏、标签栏、状态行与留白。取不到屏幕就不封顶。
+fn max_page_height(mtm: MainThreadMarker) -> f64 {
+    NSScreen::mainScreen(mtm).map_or(f64::MAX, |screen| {
+        screen.visibleFrame().size.height - SCREEN_MARGIN - 2.0 * TAB_MARGIN - STATUS_HEIGHT
+    })
+}
+
+/// 把比窗口高的一页放进滚动视图，开始时停在页顶。
+fn scrolling(
+    mtm: MainThreadMarker,
+    page: &NSView,
+    visible_height: f64,
+    page_height: f64,
+) -> Retained<NSScrollView> {
+    let scroll = NSScrollView::initWithFrame(
+        mtm.alloc(),
+        NSRect::new(NSPoint::ZERO, NSSize::new(PAGE_WIDTH, visible_height)),
+    );
+    scroll.setHasVerticalScroller(true);
+    scroll.setAutohidesScrollers(true);
+    scroll.setDrawsBackground(false);
+    scroll.setDocumentView(Some(page));
+    // 页面视图没有翻转坐标，页顶在 y 最大处
+    let clip: Retained<NSClipView> = scroll.contentView();
+    clip.scrollToPoint(NSPoint::new(0.0, page_height - visible_height));
+    scroll.reflectScrolledClipView(&clip);
+    scroll
 }

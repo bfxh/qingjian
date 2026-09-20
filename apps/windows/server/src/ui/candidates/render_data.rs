@@ -105,6 +105,8 @@ impl RenderData {
             rows: self.rows.clone(),
             // 协议里 usize::MAX 表示不高亮。
             highlighted: (self.highlight != usize::MAX).then_some(self.highlight),
+            columns: 0,
+            column_ems: Vec::new(),
             footer: self.footer.clone(),
             sentence: self.sentence.clone(),
             status: self.notice.clone(),

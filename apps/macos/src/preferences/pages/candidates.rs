@@ -2,11 +2,11 @@
 
 use objc2::MainThreadMarker;
 use objc2::rc::Retained;
-use objc2_app_kit::NSPopUpButton;
+use objc2_app_kit::{NSButton, NSPopUpButton};
 use qingjian_platform::{CandidateRenderer, Config, LayoutMode, PreeditMode, ThemeMode};
 
 use crate::candidates::available_families;
-use crate::preferences::controls::{note, row_popup, select};
+use crate::preferences::controls::{checkbox, note, row_checkbox, row_popup, select, set_checked};
 use crate::preferences::font_picker::FontPicker;
 use crate::preferences::layout::Layout;
 use crate::preferences::setting::Setting;
@@ -18,6 +18,9 @@ pub struct CandidatesPage {
 
     /// 竖排 / 横排。
     layout_mode: Retained<NSPopUpButton>,
+
+    /// 横排时上 / 下键展开成多行矩阵。
+    horizontal_grid: Retained<NSButton>,
 
     /// 青简渲染器 / 系统绘制。
     renderer: Retained<NSPopUpButton>,
@@ -42,6 +45,18 @@ impl CandidatesPage {
             .collect();
         let layout_mode = row_popup(layout, mtm, "排布", &layout_titles, Setting::Layout, target);
         note(layout, mtm, "横排时只给高亮的候选显示译词。");
+        let horizontal_grid = checkbox(
+            mtm,
+            "横排时 ↑ / ↓ 展开成多行",
+            Setting::HorizontalGrid,
+            target,
+        );
+        row_checkbox(layout, &horizontal_grid);
+        note(
+            layout,
+            mtm,
+            "勾上后横排下 ↑ / ↓ 把一行展开成 6 行矩阵并换行，← / → 在候选之间移动（拼音光标用 ⌥← / ⌥→），Esc 第一下先收回；不勾（缺省）按键与以前一样。",
+        );
         let renderer_titles: Vec<String> = CandidateRenderer::ALL
             .iter()
             .map(|r| r.label().to_owned())
@@ -81,6 +96,7 @@ impl CandidatesPage {
         Self {
             theme,
             layout_mode,
+            horizontal_grid,
             renderer,
             font,
             preedit,
@@ -97,6 +113,9 @@ impl CandidatesPage {
             &self.layout_mode,
             LayoutMode::ALL.iter().position(|l| *l == general.layout),
         );
+        set_checked(&self.horizontal_grid, general.horizontal_grid);
+        self.horizontal_grid
+            .setEnabled(general.layout == LayoutMode::Horizontal);
         select(
             &self.renderer,
             CandidateRenderer::ALL

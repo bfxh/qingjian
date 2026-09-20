@@ -135,11 +135,40 @@ impl QingjianInputController {
         true
     }
 
-    /// 高亮上下移动，越过页边自动翻页。
+    /// 上下键。高亮逐个移动，越过页边自动翻页；横排矩阵开着（`[general] horizontal_grid`）时改为：
+    /// 单行先展开成矩阵，在矩阵里换行（视口跟着滚）。
     pub(super) fn move_highlight(&self, delta: isize, client: TextClient<'_>) {
-        if host::with(|h| h.session.move_highlight(delta)).unwrap_or(false) {
+        let changed = host::with(|h| {
+            if h.grid_keys() {
+                h.session.move_rows(delta)
+            } else {
+                h.session.move_highlight(delta)
+            }
+        })
+        .unwrap_or(false);
+        if changed {
             self.render(client);
         }
+    }
+
+    /// 左右键。横排矩阵开着而且有候选时归候选：单行里逐个移动高亮（到页边自动翻页，不展开），展开后按阅读顺序跨行移动——
+    /// 上下键被矩阵占了，单行里只剩左右键能挪高亮。返回是不是归了候选（不是的话调用方照旧移动拼音光标）。
+    pub(super) fn move_cells(&self, delta: isize, client: TextClient<'_>) -> bool {
+        let handled = host::with(|h| {
+            if !h.grid_keys() || h.session.layout.is_empty() {
+                return None;
+            }
+            Some(if h.session.grid.is_some() {
+                h.session.move_cells(delta)
+            } else {
+                h.session.move_highlight(delta)
+            })
+        })
+        .flatten();
+        if handled == Some(true) {
+            self.render(client);
+        }
+        handled.is_some()
     }
 
     /// 每个键都问一次应用标识（activateServer 时进程刚拉起可能还拿不到），变了才告诉 Engine。
@@ -155,7 +184,12 @@ impl QingjianInputController {
     /// 翻页，高亮落到新页第一项。已在首页 / 末页时不动。
     pub(super) fn turn_page(&self, delta: isize, client: TextClient<'_>) -> bool {
         let turned = host::with(|h| {
-            let turned = h.session.turn_page(delta);
+            // 矩阵展开着：翻页键一次翻一屏
+            let turned = if h.session.grid.is_some() {
+                h.session.move_screens(delta)
+            } else {
+                h.session.turn_page(delta)
+            };
             if turned {
                 h.engine.note_page_turn();
             }

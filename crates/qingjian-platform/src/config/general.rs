@@ -37,6 +37,9 @@ pub struct GeneralConfig {
     /// 候选窗口竖排 / 横排。
     pub layout: LayoutMode,
 
+    /// 横排时上 / 下键把单行展开成多行矩阵（左 / 右键改为移动候选高亮，Esc 第一下先收回）。缺省关：横排下的按键与以前一样。只有 macOS 用。
+    pub horizontal_grid: bool,
+
     /// 候选窗口由青简渲染器还是系统原生绘制。
     pub renderer: CandidateRenderer,
 
@@ -117,6 +120,7 @@ impl Default for GeneralConfig {
             page_keys: PAGE_KEY_OPTIONS[0].to_owned(),
             theme: ThemeMode::default(),
             layout: LayoutMode::default(),
+            horizontal_grid: false,
             renderer: CandidateRenderer::default(),
             font: String::new(),
             preedit: PreeditMode::default(),
@@ -259,6 +263,15 @@ impl GeneralConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn horizontal_grid_is_off_unless_switched_on() {
+        assert!(!GeneralConfig::default().horizontal_grid);
+        let general: GeneralConfig = toml::from_str("layout = \"horizontal\"\n").unwrap();
+        assert!(!general.horizontal_grid);
+        let general: GeneralConfig = toml::from_str("horizontal_grid = true\n").unwrap();
+        assert!(general.horizontal_grid);
+    }
 
     #[test]
     fn page_size_and_keys_are_sanitized() {

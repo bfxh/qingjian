@@ -204,6 +204,9 @@ impl Host {
                     self.settings.set_value("general", "layout", layout.key());
                 }
             }
+            (Setting::HorizontalGrid, SettingValue::Bool(on)) => {
+                self.settings.set_bool("general", "horizontal_grid", on);
+            }
             (Setting::Preedit, SettingValue::Index(index)) => {
                 if let Some(mode) = PreeditMode::ALL.get(index) {
                     self.settings.set_value("general", "preedit", mode.key());
@@ -393,12 +396,25 @@ impl Host {
             }
             (Setting::ApiKey, SettingValue::Text(text)) => {
                 let text = text.trim();
-                if !text.is_empty() && self.settings.set_env_var(&config.predict.api_key_env, text)
-                {
-                    // 密钥换了必须重建 Predictor
-                    self.apply_config(true);
+                // 密码框看不见内容，粘贴多了（带上了终端提示符、命令）用户发现不了；这种值写进 .env 还会让整个文件解析失败
+                if text.chars().any(|c| !c.is_ascii_graphic()) {
+                    self.preferences.set_status(
+                        "密钥没有保存：里面有空格或非英文字符，多半是粘贴时多带了别的内容",
+                    );
                     return;
                 }
+                if text.is_empty() {
+                    return;
+                }
+                if self.settings.set_env_var(&config.predict.api_key_env, text) {
+                    // 密钥换了必须重建 Predictor
+                    self.apply_config(true);
+                    self.preferences.set_status("密钥已保存");
+                } else {
+                    self.preferences
+                        .set_status("密钥没有保存：写不进配置目录的 .env，详情见日志");
+                }
+                return;
             }
             (Setting::TestCloud, _) => {
                 self.start_cloud_test();
