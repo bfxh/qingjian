@@ -93,10 +93,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # gitleaks-action 2026 起对组织仓库要求商业 license（GITLEAKS_LICENSE）；改用 OSS CLI 直接扫全历史
-      - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
-        with:
-          tool: gitleaks
+      # gitleaks-action 2026 起对组织仓库要求商业 license（GITLEAKS_LICENSE），install-action 也不带 gitleaks；
+      # 直接下载官方 release 二进制（钉死版本，asset 名带平台后缀）
+      - name: Install gitleaks CLI
+        run: |
+          curl -sL -o /tmp/gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+          gitleaks version
 
       - name: Scan full history
         run: gitleaks git --exit-code=1 --log-opts="--all" --redact
