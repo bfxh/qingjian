@@ -14,6 +14,16 @@ if [[ -n "$staged_rs" ]]; then
   fi
 fi
 
+# unsafe 增量门（与 CI quality 同一个 scripts/unsafe_audit.py）：新增 unsafe 不登记就拦
+if command -v python3 >/dev/null 2>&1; then
+  python3 scripts/unsafe_audit.py
+elif command -v python >/dev/null 2>&1; then
+  python scripts/unsafe_audit.py
+else
+  echo "没有 python3 / python，跑不了 scripts/unsafe_audit.py（CI 会跑；本地装 Python 后门才完整）" >&2
+  exit 1
+fi
+
 cargo fmt --all --check
 
 # clippy 要按平台排除编不了的壳，划分与 ci.yml 的三个 job 一致。
