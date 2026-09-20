@@ -21,7 +21,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/qingjian-team/qingjian"
 
 [workspace.lints.clippy]
-all = "warn"
+all = { level = "warn", priority = -1 }  # 组优先级最低，让下面的具体 deny 覆盖
 # 审核硬门：调试残留 / 未落地标记 / 直接 panic 不允许进仓（存量清零后锁死，见 docs/contributing.md「提交前检查」）；
 # 测试里的 panic! 在各测试文件用 #[allow(clippy::panic)] 显式豁免
 dbg_macro = "deny"
