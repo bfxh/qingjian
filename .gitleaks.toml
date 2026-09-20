@@ -1,0 +1,20 @@
+# gitleaks 配置：quality.yml 的 Secrets scan 在仓库根跑 `gitleaks git`，会自动读这份文件。
+#
+# 为什么需要它：上游 6010e81 在「日志掩码」单测里放了假密钥串（sk-test-… / sk-writer-… +
+# 十六进制序列）。它们出现在那里正是为了验证「已加载密钥落盘前被掩码」，不是凭据——
+# 但全文历史扫描（`git --all`）会把**引入它的那个提交**也扫出来，而 `// gitleaks:allow`
+# 行内标注只作用于「该行所在的那次提交」，改不掉历史命中的事实（实测：标注后仍是 1 命中）。
+#
+# 收紧原则：
+#   - `extend.useDefault = true` ⇒ 默认规则集照常生效（关掉它才会让门静默变弱）；
+#   - 只按「路径 + 形态」双条件豁免（condition = "AND"），不做全局正则豁免、不用 stopwords；
+#   - 作用面 = 这一个测试文件的这一类夹具串，仓库其它任何地方出现同类串仍然报。
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "日志掩码单测的假密钥夹具（上游 6010e81 引入）：只为验证掩码，非凭据"
+condition = "AND"
+paths = ['''crates/qingjian-platform/src/logs/secrets/mod\.rs''']
+regexTarget = "line"
+regexes = ['''sk-(test|writer)-[0-9a-f]{16}''']

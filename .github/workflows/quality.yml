@@ -101,8 +101,17 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
           gitleaks version
 
+      # 命中时把「规则 / 文件:行 / 提交」打到日志（--redact 已把 Secret 字段脱敏）——
+      # 否则门只会吐一句 leaks found: N，定位只能靠猜（这次豁免夹具时踩过）。
       - name: Scan full history
-        run: gitleaks git --exit-code=1 --log-opts="--all" --redact
+        run: |
+          gitleaks git --exit-code=1 --log-opts="--all" --redact \
+            --report-format json --report-path gitleaks.json || {
+            echo "::error::gitleaks 命中：以下为位置（Secret 已脱敏），逐条核完再决定豁免还是改代码"
+            python3 -c "import json;print(chr(10).join('  %s  %s:%s  commit=%s' % (f.get('RuleID') or f.get('Description'), f.get('File'), f.get('StartLine'), str(f.get('Commit'))[:8]) for f in json.load(open('gitleaks.json'))))" \
+              || echo "  （报告没读出来——gitleaks 可能自身出错，看上面输出）"
+            exit 1
+          }
 
   todos:
     name: TODO / FIXME sweep
