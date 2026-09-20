@@ -1,4 +1,5 @@
 //! 真实 VocabularyBook 的私密选词与译词快捷键回归。
+#![allow(clippy::panic)] // 测试断言用 panic!（workspace lints 锁死生产 panic）
 use qingjian_core::Engine;
 use qingjian_dictionary::Dictionary;
 use qingjian_learning::VocabularyBook;

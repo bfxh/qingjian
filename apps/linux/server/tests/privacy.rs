@@ -1,4 +1,5 @@
 //! 隐私能力变化不能把暂存输入泄露到普通日志、用户词频或个人 n-gram。
+#![allow(clippy::panic)] // 测试断言用 panic!（workspace lints 锁死生产 panic）
 use qingjian_core::{Engine, Learner};
 use qingjian_dictionary::Dictionary;
 use qingjian_learning::{FrequencyLearner, InputLog};

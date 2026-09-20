@@ -51,10 +51,10 @@ mod tests {
 
     #[test]
     fn registered_secrets_are_masked_everywhere_they_appear() {
-        register("sk-test-0123456789abcdef");
+        register("sk-test-0123456789abcdef"); // gitleaks:allow —— 掩码单测的假串（前缀 + 十六进制序列），非真凭据
         register("short");
         let line =
-            "error parsing line: 'KEY=sk-test-0123456789abcdef' and again sk-test-0123456789abcdef";
+            "error parsing line: 'KEY=sk-test-0123456789abcdef' and again sk-test-0123456789abcdef"; // gitleaks:allow —— 掩码单测的假串（前缀 + 十六进制序列），非真凭据
         assert_eq!(mask(line), "error parsing line: 'KEY=***' and again ***");
         assert_eq!(mask("short stays"), "short stays");
         assert!(matches!(mask("nothing here"), Cow::Borrowed(_)));
@@ -62,10 +62,10 @@ mod tests {
 
     #[test]
     fn writer_masks_before_the_bytes_reach_the_file() {
-        register("sk-writer-0123456789abcdef");
+        register("sk-writer-0123456789abcdef"); // gitleaks:allow —— 掩码单测的假串（前缀 + 十六进制序列），非真凭据
         let mut writer = MaskingWriter::new(Vec::new());
         writer
-            .write_all("WARN 重载失败 line=sk-writer-0123456789abcdef\n".as_bytes())
+            .write_all("WARN 重载失败 line=sk-writer-0123456789abcdef\n".as_bytes()) // gitleaks:allow —— 掩码单测的假串（前缀 + 十六进制序列），非真凭据
             .unwrap();
         assert_eq!(
             String::from_utf8(writer.into_inner()).unwrap(),

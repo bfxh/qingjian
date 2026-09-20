@@ -1,4 +1,5 @@
 //! Linux 输入行为与会话隔离回归测试。
+#![allow(clippy::panic)] // 测试断言用 panic!（workspace lints 锁死生产 panic）
 use qingjian_core::{CustomPhrase, Engine, Learner};
 use qingjian_dictionary::Dictionary;
 use qingjian_learning::FrequencyLearner;

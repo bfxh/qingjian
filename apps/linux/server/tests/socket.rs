@@ -1,4 +1,5 @@
 //! 真 Unix socket 回环：连接编号隔离、握手失败、重启与文件权限。
+#![allow(clippy::panic)] // 测试断言用 panic!（workspace lints 锁死生产 panic）
 #![cfg(target_os = "linux")]
 use qingjian_linux_server::ipc::bind_socket;
 use qingjian_platform::protocol::{
