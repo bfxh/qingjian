@@ -35,7 +35,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 cargo build                                   # 整个 workspace
 cargo test                                    # 全部测试；-p <crate> 单个，加测试名过滤
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets -- -D warnings   # dbg!/todo!/unimplemented! 已 deny
 cargo fmt --all
 cargo run -p qingjian-cli -- <拼音>...          # Core 的主要验证方式；--replay / --eval-text 见 crate-notes
 apps/macos/scripts/bundle.sh --install        # mac 壳装到 ~/Library/Input Methods/（IMK 不能 cargo run 验证）
@@ -51,3 +51,10 @@ Windows 本机只 `cargo check --target x86_64-pc-windows-gnu`，真编译与真
 @docs/contributing.md
 
 交流用中文。
+
+
+## 审核门禁（CI 会自动跑）
+
+- quality.yml：PR 标题规范 / cargo-deny（许可与漏洞）/ gitleaks（秘密）/ 仓库卫生 / **unsafe 增量门**（对照 `docs/review/unsafe-baseline.json`）/ 大 PR 提醒。
+- ci.yml：fmt / clippy / **文档门**（rustdoc `-D warnings`）/ 全量测试。
+- 本地同步：`python3 scripts/unsafe_audit.py` 在提交前自查 unsafe 新增；改完 unsafe 要登记 `docs/review/unsafe-audit.md` 并同步基线 JSON。

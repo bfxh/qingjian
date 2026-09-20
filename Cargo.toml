@@ -22,6 +22,10 @@ repository = "https://github.com/qingjian-team/qingjian"
 
 [workspace.lints.clippy]
 all = "warn"
+# 审核硬门：调试残留 / 未落地 TODO 不允许进仓（存量清零后锁死，见 docs/contributing.md「提交前检查」）
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
 
 [workspace.dependencies]
 # 内部 crate

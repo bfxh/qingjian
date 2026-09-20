@@ -96,6 +96,35 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  unsafety:
+    name: Unsafe increment gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check unsafe against baseline
+        run: python3 scripts/unsafe_audit.py
+
+  pr-size:
+    name: PR size check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Comment if the PR is large
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADDITIONS: ${{ github.event.pull_request.additions }}
+          DELETIONS: ${{ github.event.pull_request.deletions }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          total=$(( ADDITIONS + DELETIONS ))
+          if (( total > 1200 )); then
+            gh pr comment "$NUMBER" --repo "${{ github.repository }}" --body \
+              "这个 PR 有 **${total} 行**改动，明显偏大。审起来费劲也容易漏：如果拆得开，建议先拆成几个独立 PR（功能块 / 平台壳 / 数据分开放）再合，参考 #51 的拆分方式。"
+          fi
+
   hygiene:
     name: Repo hygiene
     runs-on: ubuntu-latest
