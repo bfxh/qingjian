@@ -12,10 +12,11 @@ set -u
 ROOT="${1:-.}"
 CI="$ROOT/.github/workflows/ci.yml"
 QA="$ROOT/.github/workflows/quality.yml"
+AU="$ROOT/.github/workflows/audit.yml"
 GL="$ROOT/.gitleaks.toml"
 FAIL=0
 
-for f in "$CI" "$QA" "$GL"; do
+for f in "$CI" "$QA" "$AU" "$GL"; do
   [ -f "$f" ] || { echo "❌ 找不到 $f"; exit 1; }
 done
 
@@ -53,9 +54,9 @@ need_in "$GL" "gitleaks 配置丢了默认规则集"       "useDefault = true"
 need_in "$QA" "TODO 残留门脚本不在"   "scripts/detect_todos.py"
 need_in "$QA" "unsafe 增量门脚本不在" "scripts/unsafe_audit.py"
 
-# ⑤ 第三方 action 必须钉 commit SHA（浮动 tag 可被上游重指）。本仓两个 workflow 全部已钉，
+# ⑤ 第三方 action 必须钉 commit SHA（浮动 tag 可被上游重指）。本仓三个 workflow 全部已钉，
 #    故这里**不留例外**：谁写回 @v4 谁红。
-floaters="$(grep -nE '^\s*-? *uses: ' "$CI" "$QA" \
+floaters="$(grep -nE '^\s*-? *uses: ' "$CI" "$QA" "$AU" \
   | grep -vE 'uses: [A-Za-z0-9._/-]+@[0-9a-f]{40}' || true)"
 if [ -n "$floaters" ]; then
   echo "❌ 有 action 没钉 commit SHA："
@@ -63,7 +64,16 @@ if [ -n "$floaters" ]; then
   FAIL=1
 fi
 
+# ⑥ **周度审计门不许悄悄消失**：RustSec 周跑 / Miri / 覆盖率 三件 + 定时器（audit.yml）。
+need_in "$AU" "周度审计没定时（每周一 02:00）" "cron: '0 2 * * 1'"
+need_in "$AU" "Miri 周检不在"   "cargo miri test -p qingjian-core --lib --locked"
+need_in "$AU" "覆盖率周检不在"  "cargo llvm-cov --workspace --exclude qingjian-macos --locked"
+
+# ⑦ **形状锁自身必须挂在 CI 里**（门不能被移出流水线；pre-commit 只是本地那一份）
+need_in "$QA" "形状锁没挂进 quality" "bash scripts/ci_shape_lock.sh"
+
 if [ "$FAIL" -eq 0 ]; then
-  echo "✅ CI 形状锁通过（三平台矩阵 / 四道门命令 / 七道质量门 / secrets 三条承重件 / action 全钉 SHA）"
+  echo "✅ CI 形状锁通过（三平台矩阵 / 四道门命令 / 七道质量门 / secrets 三条承重件 /" \
+       "周度审计三件 / action 全钉 SHA / 形状锁自挂）"
 fi
 exit "$FAIL"
