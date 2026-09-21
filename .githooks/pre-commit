@@ -14,24 +14,38 @@ if [[ -n "$staged_rs" ]]; then
   fi
 fi
 
-# unsafe 增量门（与 CI quality 同一个 scripts/unsafe_audit.py）：新增 unsafe 不登记就拦
-if command -v python3 >/dev/null 2>&1; then
-  python3 scripts/unsafe_audit.py
-elif command -v python >/dev/null 2>&1; then
-  python scripts/unsafe_audit.py
-else
-  echo "没有 python3 / python，跑不了 scripts/unsafe_audit.py（CI 会跑；本地装 Python 后门才完整）" >&2
+# 挑一个**真能跑**的 python：本机 `python3` 可能是 Windows 商店占位程序（`command -v` 有它，
+# 但跑起来直接退出 49、连一行输出都没有 ⇒ 钩子会以莫名其妙的 49 失败）。所以不能只看
+# `command -v`，必须真跑一次探活。
+pick_py() {
+  for c in python3 python; do
+    if command -v "$c" >/dev/null 2>&1 && "$c" -c 'pass' >/dev/null 2>&1; then
+      echo "$c"
+      return 0
+    fi
+  done
+  return 1
+}
+PY="$(pick_py)" || {
+  echo "没有可用的 python3 / python——unsafe 增量门与 TODO 残留门跑不了（CI 会跑；本地装 Python 后门才完整）" >&2
   exit 1
-fi
+}
+
+# unsafe 增量门（与 CI quality 同一个 scripts/unsafe_audit.py）：新增 unsafe 不登记就拦
+"$PY" scripts/unsafe_audit.py
 
 # TODO / FIXME / HACK / XXX 残留门：注释与文档里不留未落地标记
-if command -v python3 >/dev/null 2>&1; then
-  python3 scripts/detect_todos.py
-elif command -v python >/dev/null 2>&1; then
-  python scripts/detect_todos.py
-else
-  echo "没有 python3 / python，跑不了 scripts/detect_todos.py（CI 会跑；本地装 Python 后门才完整）" >&2
-  exit 1
+"$PY" scripts/detect_todos.py
+
+# CI 形状锁：workflow 是纯文本，顺手删几行就能让三平台矩阵/文档门/secrets/unsafe 增量门
+# 无声消失。这一步把它们钉住（纯 grep，秒级，不需要 cargo）。
+bash scripts/ci_shape_lock.sh .
+
+# 下面两步要 cargo：**本机若没有可用的 Rust 链接器**（例如 Windows 上没装 VS ⇒ MSVC 工具链
+# 编不了），用 QINGJIAN_SKIP_CARGO=1 只跑上面的静态门；CI 侧始终全跑。
+if [ "${QINGJIAN_SKIP_CARGO:-0}" = "1" ]; then
+  echo "QINGJIAN_SKIP_CARGO=1 ⇒ 跳过 fmt/clippy（静态门已跑）" >&2
+  exit 0
 fi
 
 cargo fmt --all --check
@@ -39,8 +53,9 @@ cargo fmt --all --check
 # clippy 要按平台排除编不了的壳，划分与 ci.yml 的三个 job 一致。
 # IMK 壳依赖 objc2，非 Apple 平台上是硬 compile_error!，排除不掉就只能整条命令失败；
 # 其余平台排除它之后，Windows 三件套在本机也编得过（已在 Windows 上验过）。
+# `--locked` 与 CI 同款：本地不锁的话，Cargo.lock 陈旧时本地绿、CI 红（本地与 CI 不许漂移）。
 case "$(uname -s)" in
   Darwin) clippy_scope=(--workspace) ;;
   *) clippy_scope=(--workspace --exclude qingjian-macos) ;;
 esac
-cargo clippy "${clippy_scope[@]}" --all-targets -- -D warnings
+cargo clippy "${clippy_scope[@]}" --all-targets --locked -- -D warnings

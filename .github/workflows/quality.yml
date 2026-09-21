@@ -170,6 +170,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: CI 形状锁（门禁只许加强，不许悄悄退役）
+        run: bash scripts/ci_shape_lock.sh .
+
       - name: Check for junk files
         run: |
           junk="$(git ls-files | grep -E '(^|/)(\.DS_Store|Thumbs\.db|\._|~\$|.*\.tmp)$' || true)"
