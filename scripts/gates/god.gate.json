@@ -17,5 +17,11 @@
     "**/data/generated/**",
     "**/assets/**"
   ],
-  "baseline": "docs/review/god-baseline.json"
+  "baseline": "docs/review/god-baseline.json",
+  "_span_doc": "类型跨度门（type_span_gate.py）：按类型名聚合 impl 块——大类型按职责拆成子模块后每个文件都很小，只有聚合才看得见它还是个上帝类型。",
+  "max_type_methods_total": 40,
+  "max_type_impl_files": 8,
+  "min_methods_to_track": 10,
+  "type_span_hard_threshold": false,
+  "type_span_baseline": "docs/review/type-span-baseline.json"
 }

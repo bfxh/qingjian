@@ -76,9 +76,12 @@
 - **结构与协作门禁**：`python3 scripts/gates/gate.py --fast`（pre-commit 同款，秒级、不需 cargo）跑
   上帝对象规模棘轮 + 欠账台账对账 + 雷同代码 + 多智能体认领 + 门禁自检；合入前跑
   `python3 scripts/gates/gate.py`（多跑 fmt / clippy / 全量测试）。说明见 [GATES.md](GATES.md)。
-- **不许有上帝对象**：单文件 ≤800 行、最长函数 ≤100 行、最大类型 ≤20 成员，三条都是棘轮
-  （只准减，涨了就红）。存量欠账在 `docs/review/god-debt.md`，谁改到谁认领、顺手减；
+- **不许有上帝对象**：单文件 ≤800 行、最长函数 ≤100 行、最大类型 ≤20 成员；另有一个类型所有
+  `impl` 加起来方法 ≤40、散在文件 ≤8（按类型名聚合，拆子模块后每个文件都很小也照样抓得到）。
+  全是棘轮（只准减，涨了就红）。存量欠账在 `docs/review/god-debt.md`，谁改到谁认领、顺手减；
   拆完跑 `gate.py --write` 重记基线（**要 git diff 过目**：基线变松 = 门变松）。
+- **架构约束同样有门**：新文件必须有 `//!` 文件头、一个文件一个类型、不用 `use …::*`、
+  子模块用目录（`foo/mod.rs` 不与 `foo.rs` 并列）、`crates/*` 不许无条件依赖壳或 OS 特有 crate。
 - **多个智能体并行**：动代码前先认领（`.agents/claims/<id>.json`，见 [`.agents/CLAIMS.md`](../.agents/CLAIMS.md)），
   域与他人重叠或改到别人域里 = 红。
 

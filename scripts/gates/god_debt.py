@@ -50,6 +50,25 @@ def debt_of(entry: dict, cfg: dict) -> dict:
     return {"parts": out, "score": total}
 
 
+SPAN_LIMITS = ("max_type_methods_total", "max_type_impl_files")   # 同 god.gate.json
+
+
+def span_debt(span: dict, cfg: dict):
+    """跨文件上帝类型的欠账：方法超阈 ×2 + 散落文件超阈 ×5（发散比单纯的方法多更难改）。"""
+    lim_m = cfg.get("max_type_methods_total", 40)
+    lim_f = cfg.get("max_type_impl_files", 8)
+    rows, total = [], 0
+    for key, e in span.items():
+        over_m = max(0, e.get("methods", 0) - lim_m)
+        over_f = max(0, e.get("files", 0) - lim_f)
+        score = over_m * 2 + over_f * 5
+        if score:
+            rows.append((key, e, score, over_m, over_f))
+            total += score
+    rows.sort(key=lambda r: -r[2])
+    return rows, total
+
+
 def compute(base: dict, cfg: dict):
     rows, total = [], 0
     for rel, entry in base.items():
@@ -61,7 +80,7 @@ def compute(base: dict, cfg: dict):
     return rows, total
 
 
-def render(rows, total, cfg: dict, scanned: int) -> str:
+def render(rows, total, cfg: dict, scanned: int, srows=(), stotal=0) -> str:
     lim = {"file_lines": cfg["max_file_lines"], "max_fn_lines": cfg["max_fn_lines"],
            "max_type_members": cfg["max_type_members"]}
     cn = dict(KEYS)
@@ -76,6 +95,8 @@ def render(rows, total, cfg: dict, scanned: int) -> str:
         f"- 阈值：文件 ≤ {lim['file_lines']} 行 / 最长函数 ≤ {lim['max_fn_lines']} 行 / 最大类型 ≤ {lim['max_type_members']} 成员（同 `scripts/gates/god.gate.json`）",
         f"- 欠账文件 {len(rows)} 个，总欠账 {total}（加权：行数×1 + 函数×3 + 成员×2——函数最难读，权重最高）",
         f"- 基线在册 {scanned} 个文件；棘轮（god_gate）保证每项只准减 ⇒ 总欠账只准减",
+        f"- 另有**跨文件上帝类型** {len(srows)} 个 / 欠 {stotal}（见下表第二张；"
+        f"总欠账 = {total} + {stotal} = {total + stotal}）",
         "",
         "## 认领与清零",
         "",
@@ -92,6 +113,23 @@ def render(rows, total, cfg: dict, scanned: int) -> str:
     if len(rows) > TOP_N:
         out.append("")
         out.append(f"（另有 {len(rows) - TOP_N} 个欠账文件未列出，跑 `--write` 前的完整清单见命令输出）")
+    if srows:
+        lim_m = cfg.get("max_type_methods_total", 40)
+        lim_f = cfg.get("max_type_impl_files", 8)
+        out += [
+            "",
+            "## 跨文件上帝类型（`type_span_gate.py`）",
+            "",
+            f"按类型名聚合 `impl` 块：`methods > {lim_m}` 或 `files > {lim_f}` 即欠账"
+            f"（加权 方法×2 + 文件×5——职责发散比单纯方法多更难改）。"
+            "这类**每个文件都很小**，按文件量规模的门抓不到，只有聚合才看得见。",
+            "",
+            "| # | 类型（crate\\|类型名） | 欠账 | 方法 | 散在文件 | 认领 |",
+            "| - | --- | --- | --- | --- | --- |",
+        ]
+        for i, (key, e, score, om, of) in enumerate(srows[:TOP_N], 1):
+            out.append(f"| {i} | `{key}` | {score} | {e.get('methods', 0)}（超 {om}） | "
+                       f"{e.get('files', 0)}（超 {of}） |  |")
     return "\n".join(out) + "\n"
 
 
@@ -125,7 +163,13 @@ def main() -> int:
     if not base:
         print(f"GOD-DEBT FAIL 基线 {bpath.name} 不存在——先跑 `god_gate.py --write-baseline`")
         return 2
-    rows, total = compute(base, cfg)
+    rows, ftotal = compute(base, cfg)
+    # 跨文件上帝类型：单独一份基线（type_span_gate.py 写），并进同一本台账
+    span_path = root / "docs" / "review" / "type-span-baseline.json"
+    srows, stotal = ([], 0)
+    if span_path.is_file():
+        srows, stotal = span_debt(json.loads(span_path.read_text(encoding="utf-8")), cfg)
+    total = ftotal + stotal
 
     if a.touched:
         cp = subprocess.run(["git", "diff", "--name-only", a.touched], cwd=str(root),
@@ -140,7 +184,7 @@ def main() -> int:
         return 0
 
     if a.write:
-        payload = render(rows, total, cfg, len(base))
+        payload = render(rows, total, cfg, len(base), srows, stotal)
         tmp = LEDGER.with_suffix(LEDGER.suffix + ".tmp")
         tmp.write_text(payload, encoding="utf-8")
         import os

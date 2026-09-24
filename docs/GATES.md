@@ -52,7 +52,45 @@ python -X utf8 scripts/gates/gate.py --write    # 拆完一块后重记基线（
 
 拆一块的流程：先认领 → 拆 → `gate.py --write` → `gate.py --fast` → 提交。
 
-## 三、重复代码门（`dupe_gate.py`）
+## 三、类型跨度门（`type_span_gate.py`）
+
+**为什么还要单独一道**：`docs/contributing.md` 要求「大类型的 `impl` 按职责拆成子模块」。
+拆完之后每个文件都只有一两百行，`god_gate` 的三项指标全绿——但那个**类型本身**可能还是个
+庞然大物。按文件量规模**永远**抓不到它，必须按类型名把 `impl` 块聚合起来看。
+
+判据（每个 crate 内按类型名聚合）：
+
+| 指标 | 阈值 | 棘轮 | 硬阈 |
+| --- | --- | --- | --- |
+| `methods` 该类型所有 impl 的方法总数 | 40 | 只准减 | 待开 |
+| `files` 这些 impl 散在几个文件 | 8 | 只准减 | 待开 |
+
+当前最重的一处：`crates/qingjian-core|Engine` —— **207 个方法、散在 16 个文件**。
+这是本仓最典型的上帝对象，而它在按文件统计的门里是全绿的。
+
+## 四、架构约束门（`arch_gate.py`）
+
+把 `docs/contributing.md` 那一页「架构约束 / 代码组织」从写给人看变成机器判。
+那些规矩每一条都写得很清楚，但没有一条有人或机器在查。
+
+| 编号 | 规则 | 命中 |
+| --- | --- | --- |
+| R1 | 新 `.rs` 文件缺 `//!` 文件头 | 红（只管新增） |
+| R2 | 新文件（非 `mod.rs` / 非测试）顶层类型 > 1 | 红（只管新增） |
+| R3 | `use …::*` glob 导入 | 棘轮（`#[cfg(test)]` 与测试文件豁免） |
+| R4 | `foo.rs` 与 `foo/` 并列 | 棘轮 |
+| R5 | `crates/*` 无条件依赖 `apps/*` 的 crate 或 OS 特有 crate（objc2 / windows / gtk …） | **红（硬）** |
+| R6 | 产品代码里的 `dbg!` / `todo!` / `unimplemented!` / `unreachable!` / 裸 `panic!` | 棘轮 |
+| R7 | 装饰性分隔注释 `// ====` | 棘轮 |
+
+R5 只查**无条件**的 `[dependencies]` 段：`[target.'cfg(windows)'.dependencies]` 是平台后端
+（render 用 DirectWrite 列字族），crate 本身仍跨平台，把条件依赖也算违规会逼人改写成绕过。
+
+R6 为什么单独扫一遍：workspace lints 已经 deny 这些，但 clippy 只跑编得到的 target——
+macOS 壳在 Linux runner 上不编、Windows 三件套在 macOS runner 上不编 ⇒ 那部分文件的 `panic!`
+谁也抓不到。这里是纯文本扫描，不看能不能编译，正好补上那个**平台盲区**。
+
+## 五、重复代码门（`dupe_gate.py`）
 
 上帝对象门管「单点过大」，这个管「多处雷同」——拆上帝对象时最容易顺手复制出一批雷同的
 helper，所以两个门配套。
@@ -63,7 +101,7 @@ helper，所以两个门配套。
 - 当前基线 9 对，全是 `apps/linux/server` 与 `apps/windows/server` 之间的复制——真欠账，不是误报。
   真要消掉得抽公共 crate，而不是再复制一份。
 
-## 四、多智能体协作门（`agent_gate.py` + `.agents/CLAIMS.md`）
+## 六、多智能体协作门（`agent_gate.py` + `.agents/CLAIMS.md`）
 
 本仓同时有好几个智能体在开发。认领写在你自己那一个文件里（`.agents/claims/<id>.json`），
 文件名互不相同 ⇒ 天然没有写冲突；冲突判定交给机器（A3 域重叠）。
@@ -78,7 +116,7 @@ helper，所以两个门配套。
 
 完整协议、声明模板、文件地图见 [`.agents/CLAIMS.md`](../.agents/CLAIMS.md)。
 
-## 五、门禁自检（`gate_selftest.py`）
+## 七、门禁自检（`gate_selftest.py`）
 
 门全是仓库里的文本文件——删掉 workflow 一行、调大阈值、把硬阈改回 false、把钩子里的
 `--fast` 去掉，都不会让任何测试变红，门却已经没了。**门静默变弱比没有门更危险**（它还挂着绿勾）。
@@ -89,15 +127,16 @@ helper，所以两个门配套。
 - S4 `god_gate.py` 的两处本仓适配仍在（上游重抄整文件时最容易抄丢）；
 - S5 基线在位且是合法 JSON；
 - S6 `.agents/CLAIMS.md` 在位。
+- S7 `ci.yml` 的 `gate-shape` 锚在位（两处互盯，见下）。
 
 CI 里额外跑一次**注入自检**：`QJ_GATE_FORCE_FAIL=god-gate` 时门必须红，绿了说明这一步根本没生效。
 
-## 六、接进流水线的地方
+## 八、接进流水线的地方
 
 | 位置 | 跑什么 |
 | --- | --- |
 | `.githooks/pre-commit` | `gate.py --fast`（快门，秒级） |
-| `.github/workflows/gates.yml` | 四个 job：上帝对象 / 重复代码 / 多智能体协作 / 门禁自检 |
+| `.github/workflows/gates.yml` | 五个 job：上帝对象（含类型跨度）/ 架构约束 / 重复代码 / 多智能体协作 / 门禁自检 |
 | `ci.yml` 的 `gate-shape` job | **钉子挂在这里**：gates.yml 被整个删掉时它自己不会跑，得由别处盯住 |
 | `gate_selftest.py` S1/S2 | 钉住「本地有 CI 没有」「CI 有本地没有」「钩子上没挂快门」三种漂移 |
 

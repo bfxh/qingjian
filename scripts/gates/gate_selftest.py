@@ -15,6 +15,8 @@ true 改回 false、把钩子里的 `--fast` 去掉，都不会让任何测试�
      三档硬阈）必须还在——上游重抄整文件时最容易把这两处抄丢。
   S5 **基线在位**：`docs/review/god-baseline.json` 与 `dupe-baseline.json` 存在且是合法 JSON。
   S6 **协议在位**：`.agents/CLAIMS.md` 存在（多智能体协作协议不许删）。
+  S7 **ci.yml 的锚在位**：`gate-shape` job 必须还在——gates.yml 被整个删掉时它自己不会跑，
+     只有 ci.yml 这道能发现；这道 S7 又反过来盯住「有人把 ci.yml 的锚摘掉」。两处互盯。
 
 用法：python -X utf8 scripts/gates/gate_selftest.py
 退出码：0 = 通过；1 = 门被削弱/绕过。
@@ -32,7 +34,10 @@ WORKFLOW = ROOT / ".github" / "workflows" / "gates.yml"
 HOOK = ROOT / ".githooks" / "pre-commit"
 CFG = GATES / "god.gate.json"
 BASELINES = [ROOT / "docs" / "review" / "god-baseline.json",
-             ROOT / "docs" / "review" / "dupe-baseline.json"]
+             ROOT / "docs" / "review" / "dupe-baseline.json",
+             ROOT / "docs" / "review" / "type-span-baseline.json",
+             ROOT / "docs" / "review" / "arch-baseline.json"]
+CI = ROOT / ".github" / "workflows" / "ci.yml"
 CLAIMS = ROOT / ".agents" / "CLAIMS.md"
 
 
@@ -87,10 +92,15 @@ def main() -> int:
         print("  （god.gate.json 还没进 HEAD ⇒ 跳过与历史的对比；下一次跑起生效）")
     else:
         old = json.loads(old_txt)
-        for k in ("max_file_lines", "max_fn_lines", "max_type_members"):
+        for k in ("max_file_lines", "max_fn_lines", "max_type_members",
+                  "max_type_methods_total", "max_type_impl_files"):
+            # 老配置里没有的键 = 新引入的阈值，没有「放宽」可言（拿 0 比会误红）
+            if k not in old:
+                continue
             if cur.get(k, 0) > old.get(k, 0):
                 fails.append(f"S3 阈值放宽：{k} {old.get(k)} → {cur.get(k)}（只许收紧）")
-        for k in ("file_hard_threshold", "fn_hard_threshold", "type_hard_threshold"):
+        for k in ("file_hard_threshold", "fn_hard_threshold", "type_hard_threshold",
+                  "type_span_hard_threshold"):
             if old.get(k) is True and cur.get(k) is not True:
                 fails.append(f"S3 硬阈被关：{k} true → {cur.get(k)}（开闸后不许改回）")
         for k, verb in (("include", "变少"), ("exclude", "变多")):
@@ -121,6 +131,15 @@ def main() -> int:
     # S6 协议在位
     if not CLAIMS.is_file():
         fails.append("S6 .agents/CLAIMS.md 缺失（多智能体协作协议没了 ⇒ 并行改动没人认领）")
+
+    # S7 **ci.yml 上那道锚还在**：gates.yml 被整个删掉时它自己不会跑，只有 ci.yml 的
+    # `gate-shape` job 能发现；反过来，这道 S7 又能发现有人把 ci.yml 的锚摘掉。两处互盯。
+    if not CI.is_file():
+        fails.append("S7 ci.yml 不存在")
+    else:
+        ci = CI.read_text(encoding="utf-8")
+        if "gate-shape" not in ci or "gate_selftest.py" not in ci:
+            fails.append("S7 ci.yml 里的 `gate-shape` 锚没了——gates.yml 被删时就没人报警了")
 
     if fails:
         for f in fails:

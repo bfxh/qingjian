@@ -3164,24 +3164,29 @@
   "max_fn_lines": 117,
   "max_type_members": 0
  },
+ "scripts/gates/arch_gate.py": {
+  "file_lines": 230,
+  "max_fn_lines": 67,
+  "max_type_members": 0
+ },
  "scripts/gates/dupe_gate.py": {
   "file_lines": 165,
   "max_fn_lines": 57,
   "max_type_members": 0
  },
  "scripts/gates/gate.py": {
-  "file_lines": 136,
+  "file_lines": 143,
   "max_fn_lines": 56,
   "max_type_members": 0
  },
  "scripts/gates/gate_selftest.py": {
-  "file_lines": 136,
-  "max_fn_lines": 80,
+  "file_lines": 155,
+  "max_fn_lines": 94,
   "max_type_members": 0
  },
  "scripts/gates/god_debt.py": {
-  "file_lines": 171,
-  "max_fn_lines": 56,
+  "file_lines": 215,
+  "max_fn_lines": 62,
   "max_type_members": 0
  },
  "scripts/gates/god_diff.py": {
@@ -3192,6 +3197,11 @@
  "scripts/gates/god_gate.py": {
   "file_lines": 423,
   "max_fn_lines": 68,
+  "max_type_members": 0
+ },
+ "scripts/gates/type_span_gate.py": {
+  "file_lines": 200,
+  "max_fn_lines": 62,
   "max_type_members": 0
  },
  "tools/corpus/english_frequency.py": {

@@ -69,6 +69,8 @@ python -X utf8 scripts/gates/gate.py --fast
 | --- | --- |
 | `scripts/gates/gate.py` | 统一入口（`--fast` / `--only` / `--write`） |
 | `scripts/gates/god_gate.py` + `god.gate.json` | 上帝对象：文件/函数/类型规模棘轮 + 分项硬阈 |
+| `scripts/gates/type_span_gate.py` | 跨文件上帝类型：按类型名聚合 impl（Engine 207 方法/16 文件就是这么看见的） |
+| `scripts/gates/arch_gate.py` | 架构约束：文件头 / 一类型一文件 / glob 导入 / 目录并列 / Core 依赖方向 / 禁词 |
 | `scripts/gates/god_debt.py` + `docs/review/god-debt.md` | 存量欠账台账（数字不许手改） |
 | `scripts/gates/dupe_gate.py` | 雷同代码新增即红（纯 stdlib MinHash） |
 | `scripts/gates/agent_gate.py` | 多智能体认领 / 域不重叠 / 不越界（本页） |

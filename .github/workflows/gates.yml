@@ -34,6 +34,10 @@ jobs:
       - name: 规模棘轮
         run: python3 -X utf8 scripts/gates/god_gate.py --root . --git-tracked
 
+      # 按类型名聚合 impl：大类型拆成子模块后每个文件都很小，只有聚合才看得见它还是上帝类型。
+      - name: 类型跨度
+        run: python3 -X utf8 scripts/gates/type_span_gate.py --git-tracked
+
       # 欠账台账与基线对账：手改台账数字 = 红（想让数字变小只能真的去拆）。
       - name: 欠账台账对账
         run: python3 -X utf8 scripts/gates/god_debt.py --check
@@ -42,6 +46,19 @@ jobs:
       - name: 欠账提示
         continue-on-error: true
         run: python3 -X utf8 scripts/gates/god_debt.py --touched "${{ github.event.pull_request.base.sha || github.event.before }}"
+
+  arch:
+    name: 架构约束门
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # docs/contributing.md 里那一页架构规矩的机器版：新文件文件头与一类型一文件、
+      # glob 导入、`foo.rs`+`foo/` 并列、Core 依赖方向（硬）、禁词（补 clippy 的平台盲区）。
+      - name: 架构约束
+        run: python3 -X utf8 scripts/gates/arch_gate.py --git-tracked
 
   dupe:
     name: 重复代码门

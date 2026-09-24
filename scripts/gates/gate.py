@@ -33,6 +33,10 @@ STEPS = [
      "上帝对象（文件/函数/类型规模棘轮 + 分项硬阈）"),
     ("god-debt", [PY, "-X", "utf8", G + "god_debt.py", "--check"], "fast",
      "上帝对象欠账台账对账（数字不许手改）"),
+    ("type-span", [PY, "-X", "utf8", G + "type_span_gate.py", "--git-tracked"], "fast",
+     "跨文件上帝类型（按类型名聚合 impl：方法数 / 散落文件数）"),
+    ("arch-gate", [PY, "-X", "utf8", G + "arch_gate.py", "--git-tracked"], "fast",
+     "架构约束（新文件文件头与一类型一文件 / glob 导入 / 目录并列 / Core 依赖方向 / 禁词）"),
     ("dupe-gate", [PY, "-X", "utf8", G + "dupe_gate.py", "--git-tracked"], "fast",
      "重复代码（雷同对新增即红；纯 stdlib MinHash）"),
     ("selftest", [PY, "-X", "utf8", G + "gate_selftest.py"], "fast",
@@ -56,7 +60,10 @@ STEPS = [
 WRITE_STEPS = [
     ("god-baseline", [PY, "-X", "utf8", G + "god_gate.py", "--root", ".", "--git-tracked",
                       "--write-baseline"]),
+    ("type-span-baseline", [PY, "-X", "utf8", G + "type_span_gate.py", "--git-tracked",
+                            "--write-baseline"]),
     ("dupe-baseline", [PY, "-X", "utf8", G + "dupe_gate.py", "--git-tracked", "--write-baseline"]),
+    ("arch-baseline", [PY, "-X", "utf8", G + "arch_gate.py", "--git-tracked", "--write"]),
     ("god-debt", [PY, "-X", "utf8", G + "god_debt.py", "--write"]),
 ]
 
