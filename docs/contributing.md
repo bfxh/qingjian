@@ -73,10 +73,20 @@
   排除不掉就整条命令失败），与 [ci.yml](../.github/workflows/ci.yml) 三个 job 的划分一致；Windows 上 pre-push 另设 `QINGJIAN_UIACCESS=0`
   （Server 的 build.rs 嵌 uiAccess manifest，没签名的测试二进制起不来，os error 740）。
 - 排序 / 整句 / 纠错的改动先跑 `apps/cli` 再合。
+- **结构与协作门禁**：`python3 scripts/gates/gate.py --fast`（pre-commit 同款，秒级、不需 cargo）跑
+  上帝对象规模棘轮 + 欠账台账对账 + 雷同代码 + 多智能体认领 + 门禁自检；合入前跑
+  `python3 scripts/gates/gate.py`（多跑 fmt / clippy / 全量测试）。说明见 [GATES.md](GATES.md)。
+- **不许有上帝对象**：单文件 ≤800 行、最长函数 ≤100 行、最大类型 ≤20 成员，三条都是棘轮
+  （只准减，涨了就红）。存量欠账在 `docs/review/god-debt.md`，谁改到谁认领、顺手减；
+  拆完跑 `gate.py --write` 重记基线（**要 git diff 过目**：基线变松 = 门变松）。
+- **多个智能体并行**：动代码前先认领（`.agents/claims/<id>.json`，见 [`.agents/CLAIMS.md`](../.agents/CLAIMS.md)），
+  域与他人重叠或改到别人域里 = 红。
 
 ## CI 与发版
 
 - CI 三个 job（Linux 全量 / macOS 壳 / Windows 三 crate）都 `--locked`；Dependabot 升 actions；每周 `cargo audit`。
+  另有 `gates.yml` 跑结构与协作门禁（上帝对象 / 雷同代码 / 多智能体认领 / 门禁自检），
+  并在 ci.yml 里挂了一道「门禁自检」——把 gates.yml 或门脚本删掉，ci.yml 那道先红。
 - 发版：推 `<平台>-v<版本>` 标签触发 `release.yml`，门禁是版本号 = 标签且不带 -dev、标签在 main 上、产品数据按 SHA256SUMS 校验。
 - CHANGELOG 手写、发版时由维护者统一改（PR 不动它）。流程与 Secrets 见 [notes/release.md](notes/release.md)。
 
