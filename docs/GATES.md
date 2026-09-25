@@ -152,6 +152,8 @@ CI 里额外跑一次**注入自检**：`QJ_GATE_FORCE_FAIL=god-gate` 时门必�
 | `ignore_gate.py` | `let _ = …` / 解构里含 `_` 的丢弃位 | 155 处 |
 | `unsafe_gate.py` | `unsafe {` / `unsafe fn` / `unsafe impl`（排除 FFI 与平台壳目录） | 8 处 |
 | `cyc_gate.py` | 函数圈复杂度 > 15 / > 50 | 71 / 9 |
+| `nest_gate.py` | 函数嵌套深度 > 5 棘轮、**> 8 硬禁** | 16 / 0 |
+| `log_gate.py` | `println!` / `eprintln!` 而非 `tracing`（排除 `apps/cli`、`tools/`、`build.rs`） | 16 |
 | `trait_gate.py` | 单个 trait 定义的方法数 > 15 棘轮、**> 40 硬禁** | 14 个 trait 入册 |
 
 各自的理由：
@@ -169,11 +171,34 @@ CI 里额外跑一次**注入自检**：`QJ_GATE_FORCE_FAIL=god-gate` 时门必�
 - **圈复杂度**：决策点 = 1（函数本身）+ `if`/`for`/`while`/`loop`/`match` + `&&`/`||` + `?` +
   `match` 每分支 `=>`。与 clippy 的 `cyclomatic_complexity` 同思路，但纯文本、不依赖编译，
   因此连编不到的 target 也能扫。
+- **嵌套深度**：圈复杂度数的是「分支多少」，这一门数的是「分支套了几层」。同样复杂的一段逻辑，
+  写成卫语句平铺与写成五层 `if let` 套 `match`，复杂度可能一样，**可读性差一个量级**——
+  后者 review 时人眼配平不过来。深度从函数体的 `{` 起算为 1，所以「> 5」≈ 函数体里又套了四层。
+- **日志门面**：壳里没有控制台（macOS 的 IMK 插件、Windows 的 TSF DLL），`println!` 写出去
+  **没人收得到**，等真要查问题才发现日志早丢光了；它同时没有级别、没有 span、没法按模块开关。
+  `apps/cli` 与 `tools/` 打印到 stdout 是本分 ⇒ 排除。
 - **上帝接口**：一个 trait 方法越多，实现方要填的坑越多，越像「胖接口」。按 **crate 内 trait 名**
   聚合（同名小 trait 在不同 crate 里很常见，不合并）。> 40 是**硬禁**——基线不放行。
 
+### 硬判的四条（存量 = 0 ⇒ 不设基线）
+
+存量本来就是 0 的规矩，留基线等于给它发豁免——`--write` 重记基线就能把它祖父化。这四条**硬判**：
+
+| 门 | 判据 | 为什么值得硬判 |
+| --- | --- | --- |
+| `args_gate.py` | 函数形参 > 7 | 相邻的同类型参数随时能被对调，编译器不吭声；正解是收进结构体/配置对象 |
+| `prefix_gate.py` | 同目录下 ≥2 个 `.rs` 共享下划线前缀，而目录本身不叫那段前缀 | 用文件名当前缀分组是**目录结构**上的债，跟文件多大无关 ⇒ 按文件统计的门永远抓不到 |
+| `cargo_gate.py` C1 | `crates/*/Cargo.toml` 必须 `version.workspace = true` | 写死就会在发版时对不上 |
+| `cargo_gate.py` C2 | `apps/{macos,linux,windows}*/Cargo.toml` 必须写死自己的 `version` | 各壳独立发布，Windows 读 `server/Cargo.toml` 取版本号 ⇒ 写错就是发错版 |
+| `cargo_gate.py` C3 | 全仓不许 `anyhow`（依赖表与代码都判） | 库里抛 `anyhow::Error` 会抹掉具体错误类型，调用方只能 `downcast` 猜 |
+
+`apps/cli` 不参与 C2：它是 workspace 里的工具，不是独立发布的壳。
+
 `unsafe_gate.py` 与 `gate.py` 里那条条件步 `unsafe`（调 `scripts/unsafe_audit.py`）不重复：
 后者是**增量**门（属另一条 CI 分支，尚未合入），前者是**存量棘轮**，合入后两道并行。
+
+`cyc_gate.py` 与 `nest_gate.py` 都是「逐函数量一个数」，配平与遍历共用 `gates_common.iter_fns`
+与 `fn_metric_scan` ⇒ 两门口径一致，也不会互相雷同（雷同门同样盯着门脚本自己）。
 
 ### 碰了就得减（`god_touch.py`）
 

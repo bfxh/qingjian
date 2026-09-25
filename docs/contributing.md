@@ -78,8 +78,12 @@
   合入前跑 `python3 scripts/gates/gate.py`（多跑 fmt / clippy / 全量测试）。说明见 [GATES.md](GATES.md)。
 - **产品代码不许有这些坏味道**（全是棘轮，只准减）：`.unwrap()` / `.expect()` 系列（该用 `?`）、
   单行 > 200 字符、`thread::sleep`（该用 channel / 条件变量）、`let _ = …` 吞掉 `Result`、
-  非 FFI 代码里的 `unsafe` 块、函数圈复杂度 > 15、trait 方法数 > 15（> 40 硬禁）。
+  非 FFI 代码里的 `unsafe` 块、函数圈复杂度 > 15、嵌套深度 > 5（> 8 硬禁）、
+  `println!`/`eprintln!`（该用 `tracing`；`apps/cli` 与 `tools/` 除外）、trait 方法数 > 15（> 40 硬禁）。
   测试面（`tests/` `examples/` `benches/`）不算产品代码，不进这些门的口径。
+- **存量 = 0 的规矩直接硬判**（没有基线，不许被 `--write` 祖父化）：函数形参 > 7、
+  同目录下用文件名前缀分组（`foo_a.rs` + `foo_b.rs` ⇒ 收进 `foo/`）、`crates/*` 必须
+  `version.workspace = true`、各壳必须写死自己的 `version`、全仓不许 `anyhow`。
 - **不许有上帝对象**：单文件 ≤800 行、最长函数 ≤100 行、最大类型 ≤20 成员；另有一个类型所有
   `impl` 加起来方法 ≤40、散在文件 ≤8（按类型名聚合，拆子模块后每个文件都很小也照样抓得到）。
   全是棘轮（只准减，涨了就红）。存量欠账在 `docs/review/god-debt.md`，谁改到谁认领、顺手减；

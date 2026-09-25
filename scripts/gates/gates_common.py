@@ -15,6 +15,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -22,6 +23,22 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 EXCLUDE = ("**/target/**", "**/.git/**", "**/node_modules/**", "**/__pycache__/**",
            "**/dist/**", "**/build/**", "**/data/generated/**", "**/assets/**")
 TESTISH = ("/tests/", "/examples/", "/benches/", "/tests.rs")
+
+
+def skip_hit(rel: str, parts) -> bool:
+    """`rel` 是否命中任一片段——片段带不带前导斜杠都认，单个文件名也认。
+
+    `rel` 是**相对**路径（`apps/cli/src/x.rs`），写 `"/apps/cli/"` 永远匹配不上，
+    这类静默失效的排除面比没有排除更糟（门看着在跑，其实豁免了一大片）。
+    """
+    base = rel.rsplit("/", 1)[-1]
+    for d in parts:
+        s = d.strip("/")
+        if not s:
+            continue
+        if base == s or rel.startswith(s + "/") or f"/{s}/" in rel:
+            return True
+    return False
 
 
 def matched(rel: str, extra_exclude=()) -> bool:
@@ -51,6 +68,30 @@ def rs_files(root: pathlib.Path, git_tracked: bool, suffix=".rs", extra_exclude=
                 continue
             out.append(rel)
     return sorted(out)
+
+
+FN_DECLARE = re.compile(
+    r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:const\s+|async\s+|unsafe\s+|extern\s+)*fn\s+[A-Za-z_]")
+
+
+def iter_fns(lines):
+    """遍历掩码后的每一行，产出每个函数的 `(起始行, 结束行)`（花括号配平到函数体结束）。
+
+    cyc / nest 两道门都要「逐函数看一段代码」，各写一遍配平就会有两份各差一点的副本；
+    抽出来后两门共用同一份口径，也顺手躲开雷同门。
+    """
+    for i, line in enumerate(lines):
+        if not FN_DECLARE.match(line):
+            continue
+        depth, started, end = 0, False, len(lines) - 1
+        for j in range(i, len(lines)):
+            depth += lines[j].count("{") - lines[j].count("}")
+            if "{" in lines[j]:
+                started = True
+            if started and depth <= 0:
+                end = j
+                break
+        yield i, end
 
 
 def read_text(root: pathlib.Path, rel: str) -> str:
@@ -125,7 +166,8 @@ def add_args(ap):
     return ap
 
 
-def run_count_gate(name, baseline_rel, scan, label, extra_args=None, head=None) -> int:
+def run_count_gate(name, baseline_rel, scan, label, extra_args=None, head=None,
+                   hard=False) -> int:
     """计数门的 main 流程：解析参数 → 扫描 → 写基线 / 棘轮比对 → 报告。
 
     五道计数门（unwrap / linelen / sleep / ignore / unsafe）只有「数什么」不一样，
@@ -152,6 +194,10 @@ def run_count_gate(name, baseline_rel, scan, label, extra_args=None, head=None) 
         write_baseline(bpath, cur)
         print(f"已写基线 {baseline_rel}（{total} {label}）——此后只准减")
         return 0
+    if hard:
+        # 存量 = 0 的规矩开硬阈：`--write` 不许把它祖父化，否则「重记基线」就成了合法削弱。
+        bad = [f"{label} {rel}: {n} 处（硬阈，基线不放行）" for rel, n in sorted(cur.items())]
+        return report(name, bad, [])
     base = load_baseline(bpath)
     if not base:
         print("警告：无基线 ⇒ 不判；跑 --write 才会管住存量")
@@ -160,14 +206,69 @@ def run_count_gate(name, baseline_rel, scan, label, extra_args=None, head=None) 
     return report(name, bad, shrank)
 
 
+def fn_metric_scan(thresholds, metric):
+    """按**函数**统计指标：`metric(函数体各行) -> int`，超过每档阈值就给该文件记一笔。
+
+    cyc（圈复杂度）与 nest（嵌套深度）都是「逐函数量一个数」，配平与遍历共用 `iter_fns`，
+    各门只剩下自己的量法。
+    """
+    def scan(root, a):
+        out = {key: {} for _lim, key in thresholds}
+        for rel in rs_files(root, a.git_tracked):
+            if rel.startswith("tests/") or skip_hit(rel, TESTISH):
+                continue
+            text = read_text(root, rel)
+            if not text:
+                continue
+            lines = mask(text).splitlines()
+            for i, end in iter_fns(lines):
+                v = metric(lines[i:end + 1])
+                for lim, key in thresholds:
+                    if v > lim:
+                        out[key][rel] = out[key].get(rel, 0) + 1
+        return out
+    return scan
+
+
+def run_dicts_gate(name, baseline_rel, scan, parts, head=None, hard=()) -> int:
+    """分档计数门（多个 {文件: 计数} 字典）的 main 流程。`parts = [(key, 标签), …]`。"""
+    ap = argparse.ArgumentParser()
+    add_args(ap)
+    a = ap.parse_args()
+    cur = scan(ROOT, a)
+    summary = " ".join(f"{k}={sum(cur.get(k, {}).values())}" for k, _l in parts)
+    print(head(cur, a) if head else f"{name} {summary}")
+    if a.list:
+        for k, _l in parts:
+            for r, n in sorted(cur.get(k, {}).items(), key=lambda kv: -kv[1])[:a.top]:
+                print(f"  {k:7s} {n:3d}  {r}")
+        return 0
+    bpath = ROOT / baseline_rel
+    if a.write:
+        write_baseline(bpath, cur)
+        print(f"已写基线 {baseline_rel}（{summary}）——此后只准减")
+        return 0
+    base = load_baseline(bpath)
+    if not base:
+        print("警告：无基线 ⇒ 不判；跑 --write 才会管住存量")
+    bad, shrank = [], []
+    for k, label in parts:
+        if k in hard:
+            for rel, n in sorted(cur.get(k, {}).items()):
+                bad.append(f"{label} {rel}: {n} 处（硬阈，基线不放行）")
+            continue
+        ratchet(cur.get(k, {}), base.get(k, {}), label, bad, shrank)
+    return report(name, bad, shrank)
+
+
 def regex_scan(rx, per_line=False, prod_only=True, extra_skip=(), masked=True):
     """「每个文件里某模式出现几次」的扫描器——返回可直接交给 `run_count_gate` 的 scan。"""
     def scan(root, a):
         cur = {}
         for rel in rs_files(root, a.git_tracked):
-            if prod_only and (rel.startswith("tests/") or any(t in rel for t in TESTISH)):
+            if prod_only and (rel.startswith("tests/") or skip_hit(rel, TESTISH)):
                 continue
-            if extra_skip and any(d in rel for d in extra_skip):
+            if extra_skip and skip_hit(rel, extra_skip):
                 continue
             text = read_text(root, rel)
             if not text:

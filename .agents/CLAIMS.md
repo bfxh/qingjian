@@ -84,6 +84,11 @@ python -X utf8 scripts/gates/gate.py --fast
 | `scripts/gates/ignore_gate.py` | `let _ = …` 吞掉结果（棘轮） |
 | `scripts/gates/unsafe_gate.py` | `unsafe` 块/声明，排除 FFI 与平台壳（棘轮） |
 | `scripts/gates/cyc_gate.py` | 函数圈复杂度 > 15 / > 50（棘轮） |
+| `scripts/gates/nest_gate.py` | 嵌套深度 > 5 棘轮 / > 8 硬禁（箭头代码） |
+| `scripts/gates/args_gate.py` | 函数形参 > 7（**硬判**，存量 0） |
+| `scripts/gates/log_gate.py` | `println!`/`eprintln!` 而非 `tracing`（棘轮） |
+| `scripts/gates/prefix_gate.py` | 文件名前缀分组（**硬判**，该收进目录） |
+| `scripts/gates/cargo_gate.py` | Cargo.toml 约定：crates 版本统一 / 壳写死版本 / 不用 anyhow（**硬判**） |
 | `scripts/gates/trait_gate.py` | 上帝接口：trait 方法数 > 15 棘轮 / > 40 硬禁 |
 | `scripts/gates/agent_gate.py` | 多智能体认领 / 域不重叠 / 不越界（本页） |
 | `scripts/gates/gate_selftest.py` | 门禁自检：门不许被悄悄削弱或绕过 |

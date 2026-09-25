@@ -65,6 +65,16 @@ jobs:
       - name: 架构约束
         run: python3 -X utf8 scripts/gates/arch_gate.py --git-tracked
 
+      # `foo_a.rs` + `foo_b.rs` 摊在一个目录里 = 用文件名当前缀分组，规矩明令禁止。
+      # 这是**目录结构**上的债，跟文件多大无关 ⇒ 按文件统计的门永远抓不到。存量 0 ⇒ 硬判。
+      - name: 文件名前缀分组
+        run: python3 -X utf8 scripts/gates/prefix_gate.py --git-tracked
+
+      # 发版会出真事故的三条：crates 版本必须统一、各壳必须写死自己的版本（Windows 读
+      # server/Cargo.toml 取版本号）、全仓不用 anyhow。存量都是 0 ⇒ 全部硬判，不留基线。
+      - name: Cargo.toml 约定
+        run: python3 -X utf8 scripts/gates/cargo_gate.py --git-tracked
+
   dupe:
     name: 重复代码门
     runs-on: ubuntu-latest
@@ -112,6 +122,20 @@ jobs:
       # 圈复杂度：分支点越多越难单测覆盖。>15 与 >50 两档各自棘轮。
       - name: 函数圈复杂度
         run: python3 -X utf8 scripts/gates/cyc_gate.py --git-tracked
+
+      # 嵌套深度：同样复杂的逻辑，平铺成卫语句与套五层 if let，可读性差一个量级。
+      # >5 棘轮，>8 硬禁（存量本来就是 0）。
+      - name: 嵌套深度
+        run: python3 -X utf8 scripts/gates/nest_gate.py --git-tracked
+
+      # 参数一多，相邻的同类型参数随时能被对调而编译器不吭声。存量 0 ⇒ 硬禁。
+      - name: 函数参数个数
+        run: python3 -X utf8 scripts/gates/args_gate.py --git-tracked
+
+      # 壳里没有控制台，`println!` 写出去没人收得到；也没有级别、没有 span、没法按模块开关。
+      # apps/cli 与 tools/ 打印到 stdout 是本分 ⇒ 排除。
+      - name: 日志门面
+        run: python3 -X utf8 scripts/gates/log_gate.py --git-tracked
 
       # 胖接口：一个 trait 方法越多，实现方要填的坑越多。>15 棘轮，>40 直接硬禁。
       - name: 上帝接口 trait

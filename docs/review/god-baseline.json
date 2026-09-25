@@ -3170,8 +3170,8 @@
   "max_type_members": 0
  },
  "scripts/gates/cyc_gate.py": {
-  "file_lines": 95,
-  "max_fn_lines": 32,
+  "file_lines": 36,
+  "max_fn_lines": 4,
   "max_type_members": 0
  },
  "scripts/gates/dupe_gate.py": {
@@ -3180,18 +3180,18 @@
   "max_type_members": 0
  },
  "scripts/gates/gate.py": {
-  "file_lines": 166,
+  "file_lines": 178,
   "max_fn_lines": 56,
   "max_type_members": 0
  },
  "scripts/gates/gate_selftest.py": {
-  "file_lines": 163,
+  "file_lines": 165,
   "max_fn_lines": 94,
   "max_type_members": 0
  },
  "scripts/gates/gates_common.py": {
-  "file_lines": 182,
-  "max_fn_lines": 33,
+  "file_lines": 283,
+  "max_fn_lines": 38,
   "max_type_members": 0
  },
  "scripts/gates/god_debt.py": {
