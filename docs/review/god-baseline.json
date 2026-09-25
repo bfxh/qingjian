@@ -3190,7 +3190,7 @@
   "max_type_members": 0
  },
  "scripts/gates/gate.py": {
-  "file_lines": 188,
+  "file_lines": 193,
   "max_fn_lines": 56,
   "max_type_members": 0
  },
@@ -3224,9 +3224,19 @@
   "max_fn_lines": 42,
   "max_type_members": 0
  },
+ "scripts/gates/ident_gate.py": {
+  "file_lines": 64,
+  "max_fn_lines": 13,
+  "max_type_members": 0
+ },
  "scripts/gates/ignore_gate.py": {
-  "file_lines": 25,
+  "file_lines": 27,
   "max_fn_lines": 0,
+  "max_type_members": 0
+ },
+ "scripts/gates/lang_gate.py": {
+  "file_lines": 68,
+  "max_fn_lines": 13,
   "max_type_members": 0
  },
  "scripts/gates/linelen_gate.py": {
@@ -3252,6 +3262,16 @@
  "scripts/gates/sleep_gate.py": {
   "file_lines": 23,
   "max_fn_lines": 0,
+  "max_type_members": 0
+ },
+ "scripts/gates/super_gate.py": {
+  "file_lines": 26,
+  "max_fn_lines": 0,
+  "max_type_members": 0
+ },
+ "scripts/gates/testsize_gate.py": {
+  "file_lines": 51,
+  "max_fn_lines": 15,
   "max_type_members": 0
  },
  "scripts/gates/trait_gate.py": {

@@ -75,6 +75,11 @@ STEPS = [
      "碰了就得减（改动了已超阈的文件，就必须把它变小）"),
     ("selftest", [PY, "-X", "utf8", G + "gate_selftest.py"], "fast",
      "门禁自检（门不许被悄悄削弱/绕过）"),
+    # 自检查的是门「在不在」，这道查的是门「是不是空的」：给每道门注入一次最小违规，它必须红。
+    # 归 **full** 档：每道门要跑两遍（注入前 / 注入后）≈ 24 秒，放进 pre-commit 会把每次提交
+    # 拖到 36 秒。CI 的 gates.yml 显式跑它，合入前的 `gate.py`（全门）也会跑。
+    ("gate-probe", [PY, "-X", "utf8", G + "gate_probe.py"], "full",
+     "门是真门（逐门注入违规，不红 = 空门）"),
     # 下面两步的脚本**不在本 PR 里**（属另一条 CI 分支的工作，尚未合入 main）⇒ 脚本不存在时
     # 显式 SKIP 并说明，不静默判绿、也不把环境差异当红。
     ("unsafe", [PY, "-X", "utf8", "scripts/unsafe_audit.py"], "fast", "unsafe 增量门"),

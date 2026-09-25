@@ -16,8 +16,10 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import gates_common as gc  # noqa: E402
 
-# `let _ =` 或 `let (... _ ... ) =`（解构里含丢弃位）
-IGNORE = re.compile(r"^\s*let\s+(?:_\s*=|\([^;]*\b_\b[^;]*\)\s*=)")
+# `let _ =` 或 `let (... _ ... ) =`（解构里含丢弃位）。
+# **不锚行首**：`pub fn f() { let _ = g(); }` 这种单行函数体里的丢弃同样该算——
+# 早先写成 `^\s*let…`，单行函数体就整条漏过去了（gate_probe 注入时才暴露）。
+IGNORE = re.compile(r"\blet\s+(?:_\s*=|\([^;]*\b_\b[^;]*\)\s*=)")
 
 if __name__ == "__main__":
     sys.exit(gc.run_count_gate("IGNORE-GATE", "docs/review/ignore-baseline.json",

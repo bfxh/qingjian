@@ -95,4 +95,5 @@ python -X utf8 scripts/gates/gate.py --fast
 | `scripts/gates/testsize_gate.py` | 单文件内嵌测试 > 200 行，该搬到 `tests.rs`（棘轮） |
 | `scripts/gates/trait_gate.py` | 上帝接口：trait 方法数 > 15 棘轮 / > 40 硬禁 |
 | `scripts/gates/agent_gate.py` | 多智能体认领 / 域不重叠 / 不越界（本页） |
-| `scripts/gates/gate_selftest.py` | 门禁自检：门不许被悄悄削弱或绕过 |
+| `scripts/gates/gate_selftest.py` | 门禁自检：门不许被悄悄削弱或绕过（查门「在不在」） |
+| `scripts/gates/gate_probe.py` | 门是真门：逐门注入最小违规，不红 = 空门（查门「是不是空的」） |

@@ -203,3 +203,9 @@ jobs:
             exit 1
           fi
           echo "注入 god-gate 失败 ⇒ 门如期变红"
+
+      # 上面只验了 god-gate 一道。这一道**逐门**验：给每道门注入一次最小违规，它必须转红。
+      # 自检（gate_selftest）只查门「在不在」（workflow 里有没有那一行），查不出门「是不是
+      # 空的」——正则写错、路径过滤没匹配上、判据取到空集，这三类都挂着绿勾却一次没判过。
+      - name: 门是真门（逐门注入验证）
+        run: python3 -X utf8 scripts/gates/gate_probe.py
