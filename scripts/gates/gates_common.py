@@ -182,7 +182,7 @@ def run_count_gate(name, baseline_rel, scan, label, extra_args=None, head=None,
     cur = scan(ROOT, a)
     total = sum(cur.values())
     if head:
-        head(total, a)
+        head(cur, a)
     else:
         print(f"{name} count={total}")
     if a.list:
@@ -237,7 +237,10 @@ def run_dicts_gate(name, baseline_rel, scan, parts, head=None, hard=()) -> int:
     a = ap.parse_args()
     cur = scan(ROOT, a)
     summary = " ".join(f"{k}={sum(cur.get(k, {}).values())}" for k, _l in parts)
-    print(head(cur, a) if head else f"{name} {summary}")
+    if head:
+        head(cur, a)
+    else:
+        print(f"{name} {summary}")
     if a.list:
         for k, _l in parts:
             for r, n in sorted(cur.get(k, {}).items(), key=lambda kv: -kv[1])[:a.top]:

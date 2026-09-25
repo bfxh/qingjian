@@ -3169,6 +3169,16 @@
   "max_fn_lines": 67,
   "max_type_members": 0
  },
+ "scripts/gates/args_gate.py": {
+  "file_lines": 71,
+  "max_fn_lines": 19,
+  "max_type_members": 0
+ },
+ "scripts/gates/cargo_gate.py": {
+  "file_lines": 73,
+  "max_fn_lines": 21,
+  "max_type_members": 0
+ },
  "scripts/gates/cyc_gate.py": {
   "file_lines": 36,
   "max_fn_lines": 4,
@@ -3180,17 +3190,17 @@
   "max_type_members": 0
  },
  "scripts/gates/gate.py": {
-  "file_lines": 178,
+  "file_lines": 188,
   "max_fn_lines": 56,
   "max_type_members": 0
  },
  "scripts/gates/gate_selftest.py": {
-  "file_lines": 165,
+  "file_lines": 167,
   "max_fn_lines": 94,
   "max_type_members": 0
  },
  "scripts/gates/gates_common.py": {
-  "file_lines": 283,
+  "file_lines": 286,
   "max_fn_lines": 38,
   "max_type_members": 0
  },
@@ -3222,6 +3232,21 @@
  "scripts/gates/linelen_gate.py": {
   "file_lines": 39,
   "max_fn_lines": 12,
+  "max_type_members": 0
+ },
+ "scripts/gates/log_gate.py": {
+  "file_lines": 29,
+  "max_fn_lines": 0,
+  "max_type_members": 0
+ },
+ "scripts/gates/nest_gate.py": {
+  "file_lines": 39,
+  "max_fn_lines": 10,
+  "max_type_members": 0
+ },
+ "scripts/gates/prefix_gate.py": {
+  "file_lines": 68,
+  "max_fn_lines": 18,
   "max_type_members": 0
  },
  "scripts/gates/sleep_gate.py": {

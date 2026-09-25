@@ -89,6 +89,10 @@ python -X utf8 scripts/gates/gate.py --fast
 | `scripts/gates/log_gate.py` | `println!`/`eprintln!` 而非 `tracing`（棘轮） |
 | `scripts/gates/prefix_gate.py` | 文件名前缀分组（**硬判**，该收进目录） |
 | `scripts/gates/cargo_gate.py` | Cargo.toml 约定：crates 版本统一 / 壳写死版本 / 不用 anyhow（**硬判**） |
+| `scripts/gates/lang_gate.py` | 单辅助语言：不许 `Vec<Translation>` / `HashMap<Lang,_>`（**硬判**） |
+| `scripts/gates/ident_gate.py` | 标识符英文 / `#[error]` 文案英文（**硬判**） |
+| `scripts/gates/super_gate.py` | `use super::super::` 绕父模块转手（棘轮） |
+| `scripts/gates/testsize_gate.py` | 单文件内嵌测试 > 200 行，该搬到 `tests.rs`（棘轮） |
 | `scripts/gates/trait_gate.py` | 上帝接口：trait 方法数 > 15 棘轮 / > 40 硬禁 |
 | `scripts/gates/agent_gate.py` | 多智能体认领 / 域不重叠 / 不越界（本页） |
 | `scripts/gates/gate_selftest.py` | 门禁自检：门不许被悄悄削弱或绕过 |

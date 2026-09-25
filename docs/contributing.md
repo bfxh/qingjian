@@ -83,7 +83,11 @@
   测试面（`tests/` `examples/` `benches/`）不算产品代码，不进这些门的口径。
 - **存量 = 0 的规矩直接硬判**（没有基线，不许被 `--write` 祖父化）：函数形参 > 7、
   同目录下用文件名前缀分组（`foo_a.rs` + `foo_b.rs` ⇒ 收进 `foo/`）、`crates/*` 必须
-  `version.workspace = true`、各壳必须写死自己的 `version`、全仓不许 `anyhow`。
+  `version.workspace = true`、各壳必须写死自己的 `version`、全仓不许 `anyhow`、
+  不许 `Vec<Translation>` / `HashMap<Lang, _>` 这类多语言并列结构（一次只学一种语言）、
+  标识符一律英文且 `#[error]` 文案用英文。
+- **另有两道棘轮**：`use super::super::…` 绕父模块转手（该直接 `use crate::…`）、
+  单文件内嵌测试 > 200 行（该搬到 `tests.rs`）。
 - **不许有上帝对象**：单文件 ≤800 行、最长函数 ≤100 行、最大类型 ≤20 成员；另有一个类型所有
   `impl` 加起来方法 ≤40、散在文件 ≤8（按类型名聚合，拆子模块后每个文件都很小也照样抓得到）。
   全是棘轮（只准减，涨了就红）。存量欠账在 `docs/review/god-debt.md`，谁改到谁认领、顺手减；

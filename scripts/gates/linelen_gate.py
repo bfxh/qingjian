@@ -35,4 +35,4 @@ if __name__ == "__main__":
     sys.exit(gc.run_count_gate(
         "LINELEN-GATE", "docs/review/linelen-baseline.json", scan, f"行>{MAX} 字符",
         extra_args=lambda ap: ap.add_argument("--max", type=int, default=MAX),
-        head=lambda total, a: print(f"LINELEN-GATE(>{a.max}) count={total}")))
+        head=lambda cur, a: print(f"LINELEN-GATE(>{a.max}) count={sum(cur.values())}")))

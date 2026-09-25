@@ -75,6 +75,27 @@ jobs:
       - name: Cargo.toml 约定
         run: python3 -X utf8 scripts/gates/cargo_gate.py --git-tracked
 
+      # 「一个候选词只显示一种辅助语言」是**产品原则**：写成 Vec<Translation> /
+      # HashMap<Lang, _> 照样编译得过、测试也过，等要加第二种语言时才发现整个结构得推翻。
+      # 这是数据结构形状上的约束，规模/复杂度/命名类门都抓不到。存量 0 ⇒ 硬判。
+      - name: 单辅助语言（数据结构）
+        run: python3 -X utf8 scripts/gates/lang_gate.py --git-tracked
+
+      # 标识符一律英文；thiserror 的 #[error] 文案用英文（它要被上层当标识符用：分级、过滤）。
+      # 只判属性括号里的内容 ⇒ `#[error(transparent)] // 中文注释` 不算命中。存量 0 ⇒ 硬判。
+      - name: 标识符与错误文案语言
+        run: python3 -X utf8 scripts/gates/ident_gate.py --git-tracked
+
+      # `use super::super::X` = 绕父模块转手：读者得先搞清父模块 re-export 了什么才知道 X
+      # 从哪来，父模块一改 re-export 中间这层就断。规矩要求直接 `use crate::…`。存量 4 ⇒ 棘轮。
+      - name: super 转手
+        run: python3 -X utf8 scripts/gates/super_gate.py --git-tracked
+
+      # 「测试超过 200 行搬到 tests.rs」：内嵌测试不长在 god_gate 的口径里——700 行的文件
+      # 里 400 行是测试，god_gate 看着还没超 800，但读的人要翻过 400 行测试才看到产品逻辑。
+      - name: 测试体积
+        run: python3 -X utf8 scripts/gates/testsize_gate.py --git-tracked
+
   dupe:
     name: 重复代码门
     runs-on: ubuntu-latest

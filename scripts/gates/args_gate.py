@@ -66,5 +66,5 @@ if __name__ == "__main__":
     sys.exit(gc.run_count_gate(
         "ARGS-GATE", "docs/review/args-baseline.json", scan, f"个 >{MAX} 参函数",
         extra_args=lambda ap: ap.add_argument("--max", type=int, default=MAX),
-        head=lambda total, a: print(f"ARGS-GATE(>{a.max}) count={total}"),
+        head=lambda cur, a: print(f"ARGS-GATE(>{a.max}) count={sum(cur.values())}"),
         hard=True))         # 存量 = 0 ⇒ 硬阈：一个 >7 参的函数都不许有

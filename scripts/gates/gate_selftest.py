@@ -46,6 +46,8 @@ BASELINES = [ROOT / "docs" / "review" / "god-baseline.json",
              ROOT / "docs" / "review" / "cyc-baseline.json",
              ROOT / "docs" / "review" / "nest-baseline.json",
              ROOT / "docs" / "review" / "log-baseline.json",
+             ROOT / "docs" / "review" / "super-baseline.json",
+             ROOT / "docs" / "review" / "testsize-baseline.json",
              ROOT / "docs" / "review" / "trait-baseline.json"]
 CI = ROOT / ".github" / "workflows" / "ci.yml"
 CLAIMS = ROOT / ".agents" / "CLAIMS.md"

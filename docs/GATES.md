@@ -191,8 +191,25 @@ CI 里额外跑一次**注入自检**：`QJ_GATE_FORCE_FAIL=god-gate` 时门必�
 | `cargo_gate.py` C1 | `crates/*/Cargo.toml` 必须 `version.workspace = true` | 写死就会在发版时对不上 |
 | `cargo_gate.py` C2 | `apps/{macos,linux,windows}*/Cargo.toml` 必须写死自己的 `version` | 各壳独立发布，Windows 读 `server/Cargo.toml` 取版本号 ⇒ 写错就是发错版 |
 | `cargo_gate.py` C3 | 全仓不许 `anyhow`（依赖表与代码都判） | 库里抛 `anyhow::Error` 会抹掉具体错误类型，调用方只能 `downcast` 猜 |
+| `lang_gate.py` | 不许 `Vec<Translation>` / `[Translation; N]` / `HashMap<Lang, _>` / 复数 `translations:` | 「一个候选词只显示一种辅助语言」是**产品原则**：写成多语言并列照样编译得过、测试也过，等要加第二种语言时才发现整个数据结构得推翻。`Option<Translation>`（可选单条）是合规写法 |
+| `ident_gate.py` | 标识符一律英文；`#[error]` 文案用英文 | 中文标识符在跨平台终端/日志编码下随时乱码；`#[error]` 的文案要被上层当**标识符**用（分级、过滤、对接第三方）。只判属性括号里的内容 ⇒ `#[error(transparent)] // 中文注释` 不算命中 |
 
 `apps/cli` 不参与 C2：它是 workspace 里的工具，不是独立发布的壳。
+
+### 代码组织与命名的两条（棘轮）
+
+| 门 | 判据 | 存量 |
+| --- | --- | --- |
+| `super_gate.py` | `use super::super::…` 绕父模块转手 | 4 |
+| `testsize_gate.py` | 单文件内嵌测试（`#[cfg(test)]`）> 200 行 | 7 个文件 |
+
+- **super 转手**：`a/b/c.rs` 里写 `use super::super::X`，读者得先搞清楚 `a/mod.rs` re-export 了
+  什么才知道 X 从哪来；父模块一改 re-export，中间这层就断。规矩要求直接 `use crate::…`
+  （路径是绝对的，不用在脑子里做相对路径运算）。
+- **测试体积**：contributing 写的是「测试超过 200 行搬到 `tests.rs`」。内嵌测试**不长在 god_gate
+  的口径里**——一个 700 行的文件里 400 行是测试，产品代码只有 300 行，god_gate 看着还「没超 800」，
+  但读的人要翻过 400 行测试才看到产品逻辑。口径：从 `#[cfg(test)]` 那行起到文件末尾
+  （本仓惯例是测试放最后；万一夹在中间，量出来偏大，方向保守）。
 
 `unsafe_gate.py` 与 `gate.py` 里那条条件步 `unsafe`（调 `scripts/unsafe_audit.py`）不重复：
 后者是**增量**门（属另一条 CI 分支，尚未合入），前者是**存量棘轮**，合入后两道并行。
