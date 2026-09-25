@@ -3175,12 +3175,12 @@
   "max_type_members": 0
  },
  "scripts/gates/gate.py": {
-  "file_lines": 143,
+  "file_lines": 166,
   "max_fn_lines": 56,
   "max_type_members": 0
  },
  "scripts/gates/gate_selftest.py": {
-  "file_lines": 155,
+  "file_lines": 163,
   "max_fn_lines": 94,
   "max_type_members": 0
  },

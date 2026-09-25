@@ -1,0 +1,6 @@
+{
+ "apps/cli/src/display.rs": 1,
+ "apps/cli/src/rescoring.rs": 1,
+ "apps/macos/src/app/input_source.rs": 3,
+ "apps/windows/settings/src/panel/pages/cloud.rs": 1
+}

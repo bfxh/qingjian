@@ -13,7 +13,8 @@ true 改回 false、把钩子里的 `--fast` 去掉，都不会让任何测试�
      `*_hard_threshold` 只许 false→true；`include` 不许少、`exclude` 不许多。
   S4 **本仓适配仍在**：`god_gate.py` 里两处针对本仓的改动（脚本同目录取配置、
      三档硬阈）必须还在——上游重抄整文件时最容易把这两处抄丢。
-  S5 **基线在位**：`docs/review/god-baseline.json` 与 `dupe-baseline.json` 存在且是合法 JSON。
+  S5 **基线在位**：`docs/review/` 下各门的基线存在且是合法 JSON（没基线 = 只对新文件生效，
+     存量管不住 ⇒ 删基线等于把门卸了）。
   S6 **协议在位**：`.agents/CLAIMS.md` 存在（多智能体协作协议不许删）。
   S7 **ci.yml 的锚在位**：`gate-shape` job 必须还在——gates.yml 被整个删掉时它自己不会跑，
      只有 ci.yml 这道能发现；这道 S7 又反过来盯住「有人把 ci.yml 的锚摘掉」。两处互盯。
@@ -36,7 +37,14 @@ CFG = GATES / "god.gate.json"
 BASELINES = [ROOT / "docs" / "review" / "god-baseline.json",
              ROOT / "docs" / "review" / "dupe-baseline.json",
              ROOT / "docs" / "review" / "type-span-baseline.json",
-             ROOT / "docs" / "review" / "arch-baseline.json"]
+             ROOT / "docs" / "review" / "arch-baseline.json",
+             ROOT / "docs" / "review" / "unwrap-baseline.json",
+             ROOT / "docs" / "review" / "linelen-baseline.json",
+             ROOT / "docs" / "review" / "sleep-baseline.json",
+             ROOT / "docs" / "review" / "ignore-baseline.json",
+             ROOT / "docs" / "review" / "unsafe-baseline.json",
+             ROOT / "docs" / "review" / "cyc-baseline.json",
+             ROOT / "docs" / "review" / "trait-baseline.json"]
 CI = ROOT / ".github" / "workflows" / "ci.yml"
 CLAIMS = ROOT / ".agents" / "CLAIMS.md"
 

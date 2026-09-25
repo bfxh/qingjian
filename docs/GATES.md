@@ -131,12 +131,67 @@ helper，所以两个门配套。
 
 CI 里额外跑一次**注入自检**：`QJ_GATE_FORCE_FAIL=god-gate` 时门必须红，绿了说明这一步根本没生效。
 
-## 八、接进流水线的地方
+## 八、产品代码坏味道门（七道棘轮 + 一道「碰了就得减」）
+
+前面几道门管的是**规模**（多大）与**雷同**（几份）。这一组管的是「编译器不报、clippy 只 warn
+不拦、但代码评审每次都会挑」的坏味道。共性：
+
+- 全部**零依赖纯 stdlib**，复用 `scripts/gates/gates_common.py`（扫描面 / 基线读写 / 棘轮判定
+  只有一份实现 ⇒ 口径不会在各门之间漂移；Rust 感知掩码复用 `god_gate._mask`）；
+- 全部**排除测试面**（`/tests/`、`/examples/`、`/benches/`）——测试里 `unwrap()`、`sleep()` 是
+  正当写法，算进去只会逼人把测试写歪；
+- 全部是**棘轮**：存量入基线，只准减，新增即红。不要求一次性还清历史债，但一个数都不许再涨。
+
+| 门 | 判据 | 存量基线 |
+| --- | --- | --- |
+| `unwrap_gate.py` | 产品代码 `.unwrap()` / `.expect()` / `.unwrap_err()` / `.expect_err()` / `.unwrap_unchecked()` / `.expect_unchecked()` | 398 处 |
+| `linelen_gate.py` | 单行 > 200 字符 | 5 行 |
+| `sleep_gate.py` | `thread::sleep(` | 6 处 |
+| `ignore_gate.py` | `let _ = …` / 解构里含 `_` 的丢弃位 | 155 处 |
+| `unsafe_gate.py` | `unsafe {` / `unsafe fn` / `unsafe impl`（排除 FFI 与平台壳目录） | 8 处 |
+| `cyc_gate.py` | 函数圈复杂度 > 15 / > 50 | 71 / 9 |
+| `trait_gate.py` | 单个 trait 定义的方法数 > 15 棘轮、**> 40 硬禁** | 14 个 trait 入册 |
+
+各自的理由：
+
+- **unwrap/expect**：Rust 里 `?` 才是正确传播错误的方式；`unwrap` 一旦遇到 `Err`/`None` 就
+  panic，把库里一个可恢复错误变成整个进程崩溃。这是 Rust 头号坏味道，clippy 只 warn。
+- **超长行**：官方不强制行长，但超长行在 review / diff / 终端里都难读，也常是「一个表达式
+  塞太多东西」或超长字符串字面量的信号。
+- **`thread::sleep`**：轮询等某事、循环里 sleep 节流、启动顺序靠 sleep 凑——都会让程序在
+  CI 与弱机器上 flake、在延迟敏感路径上卡顿。正解是 channel / 条件变量 / `tokio::time::sleep` + `select!`。
+- **忽略结果**：`let _ = result;` 绝大多数是吞掉了 `Result` 里的错误，即 Rust 版的 errcheck。
+  `let _x = …`（绑给 `_x`）是正常命名，不算丢弃。
+- **unsafe**：用得越多，未定义行为面越大，reviewer 要逐行盯。FFI / 平台后端（`ffi` / `sys` /
+  `platform` / `bindings` / 各 OS 壳目录）里的 unsafe 是正当的 ⇒ 排除，其余只拦新增。
+- **圈复杂度**：决策点 = 1（函数本身）+ `if`/`for`/`while`/`loop`/`match` + `&&`/`||` + `?` +
+  `match` 每分支 `=>`。与 clippy 的 `cyclomatic_complexity` 同思路，但纯文本、不依赖编译，
+  因此连编不到的 target 也能扫。
+- **上帝接口**：一个 trait 方法越多，实现方要填的坑越多，越像「胖接口」。按 **crate 内 trait 名**
+  聚合（同名小 trait 在不同 crate 里很常见，不合并）。> 40 是**硬禁**——基线不放行。
+
+`unsafe_gate.py` 与 `gate.py` 里那条条件步 `unsafe`（调 `scripts/unsafe_audit.py`）不重复：
+后者是**增量**门（属另一条 CI 分支，尚未合入），前者是**存量棘轮**，合入后两道并行。
+
+### 碰了就得减（`god_touch.py`）
+
+棘轮只说「不许变胖」，于是存量能永远躺着：一个 5000 行的上帝文件，只要没人给它加行，它就
+永远是 5000 行，而每个人都在绕着它走。本门规定：**改了已经超阈的文件，就必须把它变小**——
+连「原样不动」都不行。
+
+- 判据：本次改动碰到的、且在 `god-baseline.json` 里已超过任一硬阈的文件，其当前规模
+  （`file_lines` / `max_fn_lines` / `max_type_members` 任一维度）必须**严格小于**基线；
+- 未超阈的文件不受这条管（仍受上帝对象门的棘轮管）；
+- 没有这条，正确的重构反而会被棘轮逼着去关门，而真正的债务永远不动。
+
+CI 传 PR 的 base sha；本地缺省比 `git diff HEAD`。base 拿不到时自动退回比 HEAD。
+
+## 九、接进流水线的地方
 
 | 位置 | 跑什么 |
 | --- | --- |
 | `.githooks/pre-commit` | `gate.py --fast`（快门，秒级） |
-| `.github/workflows/gates.yml` | 五个 job：上帝对象（含类型跨度）/ 架构约束 / 重复代码 / 多智能体协作 / 门禁自检 |
+| `.github/workflows/gates.yml` | 六个 job：上帝对象（含类型跨度、碰了就得减）/ 架构约束 / 重复代码 / 产品代码坏味道 / 多智能体协作 / 门禁自检 |
 | `ci.yml` 的 `gate-shape` job | **钉子挂在这里**：gates.yml 被整个删掉时它自己不会跑，得由别处盯住 |
 | `gate_selftest.py` S1/S2 | 钉住「本地有 CI 没有」「CI 有本地没有」「钩子上没挂快门」三种漂移 |
 

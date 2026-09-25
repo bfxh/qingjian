@@ -1,4 +1,4 @@
-# 门禁：上帝对象 / 重复代码 / 多智能体协作 / 门禁自检。
+# 门禁：上帝对象 / 架构约束 / 重复代码 / 产品代码坏味道 / 多智能体协作 / 门禁自检。
 # 与 quality.yml（PR 标题、cargo-deny、gitleaks、unsafe 增量、残留标记扫描、仓库卫生）和
 # ci.yml（fmt / clippy / 文档门 / 全量测试）互补——那两条管编译与安全，这条管**结构与协作**。
 #
@@ -47,6 +47,11 @@ jobs:
         continue-on-error: true
         run: python3 -X utf8 scripts/gates/god_debt.py --touched "${{ github.event.pull_request.base.sha || github.event.before }}"
 
+      # 碰了就得减：棘轮只说「不许变胖」，于是存量能永远躺着——一个 5000 行的上帝文件
+      # 只要没人给它加行就永远是 5000 行。改了已超阈的文件，就必须把它变小。
+      - name: 碰了就得减
+        run: python3 -X utf8 scripts/gates/god_touch.py --base "${{ github.event.pull_request.base.sha || github.event.before }}"
+
   arch:
     name: 架构约束门
     runs-on: ubuntu-latest
@@ -71,6 +76,46 @@ jobs:
       # 纯 stdlib bottom-k MinHash，无需编译任何东西；雷同对新增即红。
       - name: 雷同对检查
         run: python3 -X utf8 scripts/gates/dupe_gate.py --git-tracked
+
+  smells:
+    name: 产品代码坏味道门
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # 下面几条都是 clippy 不拦、编译器不报、但代码评审会反复挑的坏味道。
+      # 口径统一走 `gates_common`：`--git-tracked` 只算已跟踪文件，测试面（/tests/ 等）不算产品代码。
+      # 全部是**棘轮**：存量入基线，只准减，新增即红——不要求一次性还清历史债。
+
+      # Rust 里 `?` 才是正确传播错误的方式；unwrap/expect 把可恢复错误变成进程崩溃。
+      - name: unwrap/expect 滥用
+        run: python3 -X utf8 scripts/gates/unwrap_gate.py --git-tracked
+
+      # 超长行在 review / diff / 终端里都难读，也常是「一个表达式塞太多东西」的信号。
+      - name: 超长行
+        run: python3 -X utf8 scripts/gates/linelen_gate.py --git-tracked
+
+      # sleep 轮询 / 启动顺序靠 sleep 凑 ⇒ CI 上 flake、延迟敏感路径卡顿。
+      - name: thread::sleep
+        run: python3 -X utf8 scripts/gates/sleep_gate.py --git-tracked
+
+      # `let _ = result;` 绝大多数是吞掉了 Result 里的错误（Rust 版 errcheck）。
+      - name: 忽略结果
+        run: python3 -X utf8 scripts/gates/ignore_gate.py --git-tracked
+
+      # unsafe 用得越多，未定义行为面越大；FFI / 平台后端里的 unsafe 是正当的 ⇒ 排除。
+      - name: unsafe 块
+        run: python3 -X utf8 scripts/gates/unsafe_gate.py --git-tracked
+
+      # 圈复杂度：分支点越多越难单测覆盖。>15 与 >50 两档各自棘轮。
+      - name: 函数圈复杂度
+        run: python3 -X utf8 scripts/gates/cyc_gate.py --git-tracked
+
+      # 胖接口：一个 trait 方法越多，实现方要填的坑越多。>15 棘轮，>40 直接硬禁。
+      - name: 上帝接口 trait
+        run: python3 -X utf8 scripts/gates/trait_gate.py --git-tracked
 
   agents:
     name: 多智能体协作门

@@ -59,9 +59,12 @@ CI 不设身份不会让门静默变绿：A1–A3 照跑。
 （拆大函数会大改那个文件，不认领就会跟别人撞）。拆完跑：
 
 ```bash
-python -X utf8 scripts/gates/gate.py --write   # 重记三条基线（要 git diff 过目）
+python -X utf8 scripts/gates/gate.py --write   # 重记全部基线（要 git diff 过目）
 python -X utf8 scripts/gates/gate.py --fast
 ```
+
+注意 `god_touch.py`：**碰了欠账清单上已超阈的文件，就必须把它变小**（连原样不动都不行）。
+所以认领后别只改注释——要么真的拆，要么别碰那个文件。
 
 ## 门禁文件地图
 
@@ -72,6 +75,15 @@ python -X utf8 scripts/gates/gate.py --fast
 | `scripts/gates/type_span_gate.py` | 跨文件上帝类型：按类型名聚合 impl（Engine 207 方法/16 文件就是这么看见的） |
 | `scripts/gates/arch_gate.py` | 架构约束：文件头 / 一类型一文件 / glob 导入 / 目录并列 / Core 依赖方向 / 禁词 |
 | `scripts/gates/god_debt.py` + `docs/review/god-debt.md` | 存量欠账台账（数字不许手改） |
+| `scripts/gates/god_touch.py` | 碰了就得减：改了已超阈的文件就必须把它变小 |
 | `scripts/gates/dupe_gate.py` | 雷同代码新增即红（纯 stdlib MinHash） |
+| `scripts/gates/gates_common.py` | 各门共用件（扫描面 / 基线读写 / 棘轮；**不是一道门**，只被 import） |
+| `scripts/gates/unwrap_gate.py` | 产品代码 `.unwrap()` / `.expect()` 系列（棘轮） |
+| `scripts/gates/linelen_gate.py` | 单行 > 200 字符（棘轮） |
+| `scripts/gates/sleep_gate.py` | `thread::sleep(`（棘轮） |
+| `scripts/gates/ignore_gate.py` | `let _ = …` 吞掉结果（棘轮） |
+| `scripts/gates/unsafe_gate.py` | `unsafe` 块/声明，排除 FFI 与平台壳（棘轮） |
+| `scripts/gates/cyc_gate.py` | 函数圈复杂度 > 15 / > 50（棘轮） |
+| `scripts/gates/trait_gate.py` | 上帝接口：trait 方法数 > 15 棘轮 / > 40 硬禁 |
 | `scripts/gates/agent_gate.py` | 多智能体认领 / 域不重叠 / 不越界（本页） |
 | `scripts/gates/gate_selftest.py` | 门禁自检：门不许被悄悄削弱或绕过 |

@@ -8,7 +8,7 @@
   python -X utf8 scripts/gates/gate.py --list     # 列出步骤
   python -X utf8 scripts/gates/gate.py --only god-gate,dupe-gate
   python -X utf8 scripts/gates/gate.py --no-cargo # 无 Rust 工具链时（**显式**，不静默）
-  python -X utf8 scripts/gates/gate.py --write    # 重记三条基线（拆完一块后跑；要人工过目）
+  python -X utf8 scripts/gates/gate.py --write    # 重记全部基线（拆完一块后跑；要人工过目）
   QJ_GATE_FORCE_FAIL=god-gate …                   # 自检：注入失败，验证门是真门
 
 退出码：0 = 全绿；1 = 有门红；2 = 用法/环境错。
@@ -39,6 +39,22 @@ STEPS = [
      "架构约束（新文件文件头与一类型一文件 / glob 导入 / 目录并列 / Core 依赖方向 / 禁词）"),
     ("dupe-gate", [PY, "-X", "utf8", G + "dupe_gate.py", "--git-tracked"], "fast",
      "重复代码（雷同对新增即红；纯 stdlib MinHash）"),
+    ("unwrap-gate", [PY, "-X", "utf8", G + "unwrap_gate.py", "--git-tracked"], "fast",
+     "unwrap/expect 滥用（产品代码，棘轮只准减）"),
+    ("linelen-gate", [PY, "-X", "utf8", G + "linelen_gate.py", "--git-tracked"], "fast",
+     "超长行 >200 字符（棘轮只准减）"),
+    ("sleep-gate", [PY, "-X", "utf8", G + "sleep_gate.py", "--git-tracked"], "fast",
+     "thread::sleep（产品代码，棘轮只准减）"),
+    ("ignore-gate", [PY, "-X", "utf8", G + "ignore_gate.py", "--git-tracked"], "fast",
+     "忽略结果 let _ =（产品代码，棘轮只准减）"),
+    ("unsafe-gate", [PY, "-X", "utf8", G + "unsafe_gate.py", "--git-tracked"], "fast",
+     "unsafe 块/声明（排除 FFI 与平台壳，棘轮只准减）"),
+    ("cyc-gate", [PY, "-X", "utf8", G + "cyc_gate.py", "--git-tracked"], "fast",
+     "函数圈复杂度 >15 / >50（棘轮只准减）"),
+    ("trait-gate", [PY, "-X", "utf8", G + "trait_gate.py", "--git-tracked"], "fast",
+     "上帝接口 trait 方法数（>15 棘轮 / >40 硬禁）"),
+    ("god-touch", [PY, "-X", "utf8", G + "god_touch.py", "--git-tracked"], "fast",
+     "碰了就得减（改动了已超阈的文件，就必须把它变小）"),
     ("selftest", [PY, "-X", "utf8", G + "gate_selftest.py"], "fast",
      "门禁自检（门不许被悄悄削弱/绕过）"),
     # 下面两步的脚本**不在本 PR 里**（属另一条 CI 分支的工作，尚未合入 main）⇒ 脚本不存在时
@@ -64,6 +80,13 @@ WRITE_STEPS = [
                             "--write-baseline"]),
     ("dupe-baseline", [PY, "-X", "utf8", G + "dupe_gate.py", "--git-tracked", "--write-baseline"]),
     ("arch-baseline", [PY, "-X", "utf8", G + "arch_gate.py", "--git-tracked", "--write"]),
+    ("unwrap-baseline", [PY, "-X", "utf8", G + "unwrap_gate.py", "--git-tracked", "--write"]),
+    ("linelen-baseline", [PY, "-X", "utf8", G + "linelen_gate.py", "--git-tracked", "--write"]),
+    ("sleep-baseline", [PY, "-X", "utf8", G + "sleep_gate.py", "--git-tracked", "--write"]),
+    ("ignore-baseline", [PY, "-X", "utf8", G + "ignore_gate.py", "--git-tracked", "--write"]),
+    ("unsafe-baseline", [PY, "-X", "utf8", G + "unsafe_gate.py", "--git-tracked", "--write"]),
+    ("cyc-baseline", [PY, "-X", "utf8", G + "cyc_gate.py", "--git-tracked", "--write"]),
+    ("trait-baseline", [PY, "-X", "utf8", G + "trait_gate.py", "--git-tracked", "--write"]),
     ("god-debt", [PY, "-X", "utf8", G + "god_debt.py", "--write"]),
 ]
 

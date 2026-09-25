@@ -74,12 +74,18 @@
   （Server 的 build.rs 嵌 uiAccess manifest，没签名的测试二进制起不来，os error 740）。
 - 排序 / 整句 / 纠错的改动先跑 `apps/cli` 再合。
 - **结构与协作门禁**：`python3 scripts/gates/gate.py --fast`（pre-commit 同款，秒级、不需 cargo）跑
-  上帝对象规模棘轮 + 欠账台账对账 + 雷同代码 + 多智能体认领 + 门禁自检；合入前跑
-  `python3 scripts/gates/gate.py`（多跑 fmt / clippy / 全量测试）。说明见 [GATES.md](GATES.md)。
+  上帝对象规模棘轮 + 欠账台账对账 + 雷同代码 + 产品代码坏味道 + 多智能体认领 + 门禁自检；
+  合入前跑 `python3 scripts/gates/gate.py`（多跑 fmt / clippy / 全量测试）。说明见 [GATES.md](GATES.md)。
+- **产品代码不许有这些坏味道**（全是棘轮，只准减）：`.unwrap()` / `.expect()` 系列（该用 `?`）、
+  单行 > 200 字符、`thread::sleep`（该用 channel / 条件变量）、`let _ = …` 吞掉 `Result`、
+  非 FFI 代码里的 `unsafe` 块、函数圈复杂度 > 15、trait 方法数 > 15（> 40 硬禁）。
+  测试面（`tests/` `examples/` `benches/`）不算产品代码，不进这些门的口径。
 - **不许有上帝对象**：单文件 ≤800 行、最长函数 ≤100 行、最大类型 ≤20 成员；另有一个类型所有
   `impl` 加起来方法 ≤40、散在文件 ≤8（按类型名聚合，拆子模块后每个文件都很小也照样抓得到）。
   全是棘轮（只准减，涨了就红）。存量欠账在 `docs/review/god-debt.md`，谁改到谁认领、顺手减；
   拆完跑 `gate.py --write` 重记基线（**要 git diff 过目**：基线变松 = 门变松）。
+  **碰了就得减**：改动已超阈的欠账文件时，必须把它变小——棘轮只管「不许变胖」，这条连
+  「原样不动」都不放行，否则存量能永远躺着没人碰。
 - **架构约束同样有门**：新文件必须有 `//!` 文件头、一个文件一个类型、不用 `use …::*`、
   子模块用目录（`foo/mod.rs` 不与 `foo.rs` 并列）、`crates/*` 不许无条件依赖壳或 OS 特有 crate。
 - **多个智能体并行**：动代码前先认领（`.agents/claims/<id>.json`，见 [`.agents/CLAIMS.md`](../.agents/CLAIMS.md)），
@@ -88,7 +94,8 @@
 ## CI 与发版
 
 - CI 三个 job（Linux 全量 / macOS 壳 / Windows 三 crate）都 `--locked`；Dependabot 升 actions；每周 `cargo audit`。
-  另有 `gates.yml` 跑结构与协作门禁（上帝对象 / 雷同代码 / 多智能体认领 / 门禁自检），
+  另有 `gates.yml` 跑结构与协作门禁（上帝对象 / 架构约束 / 雷同代码 / 产品代码坏味道 /
+  多智能体认领 / 门禁自检），
   并在 ci.yml 里挂了一道「门禁自检」——把 gates.yml 或门脚本删掉，ci.yml 那道先红。
 - 发版：推 `<平台>-v<版本>` 标签触发 `release.yml`，门禁是版本号 = 标签且不带 -dev、标签在 main 上、产品数据按 SHA256SUMS 校验。
 - CHANGELOG 手写、发版时由维护者统一改（PR 不动它）。流程与 Secrets 见 [notes/release.md](notes/release.md)。
