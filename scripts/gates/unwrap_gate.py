@@ -9,7 +9,6 @@
 
 用法：python3 -X utf8 scripts/gates/unwrap_gate.py [--git-tracked] [--list] [--write]
 """
-import argparse
 import pathlib
 import re
 import sys
@@ -17,47 +16,9 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import gates_common as gc  # noqa: E402
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
-BASELINE = "docs/review/unwrap-baseline.json"
 UNWRAP = re.compile(
     r"\.(?:unwrap|expect|unwrap_err|expect_err|unwrap_unchecked|expect_unchecked)\s*\(")
 
-
-def scan(root: pathlib.Path, git_tracked: bool):
-    cur = {}
-    for rel in gc.rs_files(root, git_tracked):
-        if any(t in rel for t in gc.TESTISH) or rel.startswith("tests/"):
-            continue
-        text = gc.read_text(root, rel)
-        if not text:
-            continue
-        n = len(UNWRAP.findall(gc.mask(text)))
-        if n:
-            cur[rel] = n
-    return cur
-
-
-def main() -> int:
-    ap = gc.add_args(argparse.ArgumentParser())
-    a = ap.parse_args()
-    bpath = ROOT / BASELINE
-    cur = scan(ROOT, a.git_tracked)
-    print(f"UNWRAP-GATE count={sum(cur.values())}")
-    if a.list:
-        for r, n in sorted(cur.items(), key=lambda kv: -kv[1])[:a.top]:
-            print(f"  {n:3d}  {r}")
-        return 0
-    if a.write:
-        gc.write_baseline(bpath, cur)
-        print(f"已写基线 {BASELINE}（{sum(cur.values())} 处 unwrap/expect）——此后只准减")
-        return 0
-    base = gc.load_baseline(bpath)
-    if not base:
-        print("警告：无基线 ⇒ 不判；跑 --write 才会管住存量")
-    bad, shrank = [], []
-    gc.ratchet(cur, base, "unwrap", bad, shrank)
-    return gc.report("UNWRAP-GATE", bad, shrank)
-
-
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(gc.run_count_gate("UNWRAP-GATE", "docs/review/unwrap-baseline.json",
+                               gc.regex_scan(UNWRAP), "处 unwrap/expect"))

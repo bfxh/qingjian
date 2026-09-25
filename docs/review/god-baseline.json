@@ -3160,13 +3160,18 @@
   "max_type_members": 2
  },
  "scripts/gates/agent_gate.py": {
-  "file_lines": 220,
-  "max_fn_lines": 117,
+  "file_lines": 250,
+  "max_fn_lines": 33,
   "max_type_members": 0
  },
  "scripts/gates/arch_gate.py": {
   "file_lines": 230,
   "max_fn_lines": 67,
+  "max_type_members": 0
+ },
+ "scripts/gates/cyc_gate.py": {
+  "file_lines": 95,
+  "max_fn_lines": 32,
   "max_type_members": 0
  },
  "scripts/gates/dupe_gate.py": {
@@ -3184,6 +3189,11 @@
   "max_fn_lines": 94,
   "max_type_members": 0
  },
+ "scripts/gates/gates_common.py": {
+  "file_lines": 182,
+  "max_fn_lines": 33,
+  "max_type_members": 0
+ },
  "scripts/gates/god_debt.py": {
   "file_lines": 215,
   "max_fn_lines": 62,
@@ -3199,9 +3209,44 @@
   "max_fn_lines": 68,
   "max_type_members": 0
  },
+ "scripts/gates/god_touch.py": {
+  "file_lines": 91,
+  "max_fn_lines": 42,
+  "max_type_members": 0
+ },
+ "scripts/gates/ignore_gate.py": {
+  "file_lines": 25,
+  "max_fn_lines": 0,
+  "max_type_members": 0
+ },
+ "scripts/gates/linelen_gate.py": {
+  "file_lines": 39,
+  "max_fn_lines": 12,
+  "max_type_members": 0
+ },
+ "scripts/gates/sleep_gate.py": {
+  "file_lines": 23,
+  "max_fn_lines": 0,
+  "max_type_members": 0
+ },
+ "scripts/gates/trait_gate.py": {
+  "file_lines": 114,
+  "max_fn_lines": 42,
+  "max_type_members": 0
+ },
  "scripts/gates/type_span_gate.py": {
   "file_lines": 200,
   "max_fn_lines": 62,
+  "max_type_members": 0
+ },
+ "scripts/gates/unsafe_gate.py": {
+  "file_lines": 27,
+  "max_fn_lines": 0,
+  "max_type_members": 0
+ },
+ "scripts/gates/unwrap_gate.py": {
+  "file_lines": 25,
+  "max_fn_lines": 0,
   "max_type_members": 0
  },
  "tools/corpus/english_frequency.py": {

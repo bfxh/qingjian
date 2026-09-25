@@ -2,12 +2,12 @@
 
 由 `scripts/gates/god_debt.py --write` 生成，**不要手改数字**——`--check` 会拿它与 `god-baseline.json` 对账，改了就红（想让数字变小只能真的去拆）。
 
-<!-- debt-total: 6649 -->
+<!-- debt-total: 6598 -->
 
 - 阈值：文件 ≤ 800 行 / 最长函数 ≤ 100 行 / 最大类型 ≤ 20 成员（同 `scripts/gates/god.gate.json`）
-- 欠账文件 46 个，总欠账 6649（加权：行数×1 + 函数×3 + 成员×2——函数最难读，权重最高）
-- 基线在册 694 个文件；棘轮（god_gate）保证每项只准减 ⇒ 总欠账只准减
-- 另有**跨文件上帝类型** 6 个 / 欠 555（见下表第二张；总欠账 = 6649 + 555 = 7204）
+- 欠账文件 45 个，总欠账 6598（加权：行数×1 + 函数×3 + 成员×2——函数最难读，权重最高）
+- 基线在册 703 个文件；棘轮（god_gate）保证每项只准减 ⇒ 总欠账只准减
+- 另有**跨文件上帝类型** 6 个 / 欠 555（见下表第二张；总欠账 = 6598 + 555 = 7153）
 
 ## 认领与清零
 
@@ -37,27 +37,27 @@
 | 19 | `apps/macos/src/preferences/pages/shortcuts.rs` | 84 | 最长函数行数 128→≤100（超 28） |  |
 | 20 | `crates/qingjian-core/src/sentence/viterbi.rs` | 78 | 最长函数行数 126→≤100（超 26） |  |
 | 21 | `apps/macos/src/preferences/window.rs` | 71 | 最长函数行数 123→≤100（超 23）、最大类型成员数 21→≤20（超 1） |  |
-| 22 | `scripts/gates/agent_gate.py` | 51 | 最长函数行数 117→≤100（超 17） |  |
-| 23 | `apps/cli/src/replay/mod.rs` | 48 | 最长函数行数 116→≤100（超 16） |  |
-| 24 | `apps/windows/tsf/src/com/service/key_sink.rs` | 48 | 最长函数行数 116→≤100（超 16） |  |
-| 25 | `apps/macos/src/host/mod.rs` | 46 | 最大类型成员数 43→≤20（超 23） |  |
-| 26 | `crates/qingjian-render/examples/preview.rs` | 39 | 最长函数行数 113→≤100（超 13） |  |
-| 27 | `crates/qingjian-dictionary/src/dictionary/mod.rs` | 38 | 最大类型成员数 39→≤20（超 19） |  |
-| 28 | `crates/qingjian-render/src/renderer/mod.rs` | 36 | 最大类型成员数 38→≤20（超 18） |  |
-| 29 | `apps/windows/server/src/dispatch/message.rs` | 30 | 最长函数行数 110→≤100（超 10） |  |
-| 30 | `apps/windows/settings/src/panel/pages/general.rs` | 30 | 最长函数行数 110→≤100（超 10） |  |
-| 31 | `apps/macos/src/candidates/view/mod.rs` | 26 | 最大类型成员数 33→≤20（超 13） |  |
-| 32 | `crates/qingjian-core/src/engine/composing.rs` | 26 | 最大类型成员数 33→≤20（超 13） |  |
-| 33 | `apps/macos/src/preferences/pages/usage.rs` | 18 | 最长函数行数 106→≤100（超 6） |  |
-| 34 | `apps/cli/src/args.rs` | 16 | 最大类型成员数 28→≤20（超 8） |  |
-| 35 | `crates/qingjian-platform/src/config/general.rs` | 16 | 最大类型成员数 28→≤20（超 8） |  |
-| 36 | `apps/windows/server/src/main.rs` | 15 | 最长函数行数 105→≤100（超 5） |  |
-| 37 | `crates/qingjian-core/src/sentence/user_ngram.rs` | 14 | 最大类型成员数 27→≤20（超 7） |  |
-| 38 | `apps/windows/server/src/dispatch/config.rs` | 10 | 最大类型成员数 25→≤20（超 5） |  |
-| 39 | `apps/windows/server/src/dispatch/mod.rs` | 10 | 最大类型成员数 25→≤20（超 5） |  |
-| 40 | `crates/qingjian-render/src/canvas.rs` | 8 | 最大类型成员数 24→≤20（超 4） |  |
+| 22 | `apps/cli/src/replay/mod.rs` | 48 | 最长函数行数 116→≤100（超 16） |  |
+| 23 | `apps/windows/tsf/src/com/service/key_sink.rs` | 48 | 最长函数行数 116→≤100（超 16） |  |
+| 24 | `apps/macos/src/host/mod.rs` | 46 | 最大类型成员数 43→≤20（超 23） |  |
+| 25 | `crates/qingjian-render/examples/preview.rs` | 39 | 最长函数行数 113→≤100（超 13） |  |
+| 26 | `crates/qingjian-dictionary/src/dictionary/mod.rs` | 38 | 最大类型成员数 39→≤20（超 19） |  |
+| 27 | `crates/qingjian-render/src/renderer/mod.rs` | 36 | 最大类型成员数 38→≤20（超 18） |  |
+| 28 | `apps/windows/server/src/dispatch/message.rs` | 30 | 最长函数行数 110→≤100（超 10） |  |
+| 29 | `apps/windows/settings/src/panel/pages/general.rs` | 30 | 最长函数行数 110→≤100（超 10） |  |
+| 30 | `apps/macos/src/candidates/view/mod.rs` | 26 | 最大类型成员数 33→≤20（超 13） |  |
+| 31 | `crates/qingjian-core/src/engine/composing.rs` | 26 | 最大类型成员数 33→≤20（超 13） |  |
+| 32 | `apps/macos/src/preferences/pages/usage.rs` | 18 | 最长函数行数 106→≤100（超 6） |  |
+| 33 | `apps/cli/src/args.rs` | 16 | 最大类型成员数 28→≤20（超 8） |  |
+| 34 | `crates/qingjian-platform/src/config/general.rs` | 16 | 最大类型成员数 28→≤20（超 8） |  |
+| 35 | `apps/windows/server/src/main.rs` | 15 | 最长函数行数 105→≤100（超 5） |  |
+| 36 | `crates/qingjian-core/src/sentence/user_ngram.rs` | 14 | 最大类型成员数 27→≤20（超 7） |  |
+| 37 | `apps/windows/server/src/dispatch/config.rs` | 10 | 最大类型成员数 25→≤20（超 5） |  |
+| 38 | `apps/windows/server/src/dispatch/mod.rs` | 10 | 最大类型成员数 25→≤20（超 5） |  |
+| 39 | `crates/qingjian-render/src/canvas.rs` | 8 | 最大类型成员数 24→≤20（超 4） |  |
+| 40 | `crates/qingjian-core/src/composition.rs` | 4 | 最大类型成员数 22→≤20（超 2） |  |
 
-（另有 6 个欠账文件未列出，跑 `--write` 前的完整清单见命令输出）
+（另有 5 个欠账文件未列出，跑 `--write` 前的完整清单见命令输出）
 
 ## 跨文件上帝类型（`type_span_gate.py`）
 

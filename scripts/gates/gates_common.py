@@ -123,3 +123,59 @@ def add_args(ap):
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--top", type=int, default=8)
     return ap
+
+
+def run_count_gate(name, baseline_rel, scan, label, extra_args=None, head=None) -> int:
+    """计数门的 main 流程：解析参数 → 扫描 → 写基线 / 棘轮比对 → 报告。
+
+    五道计数门（unwrap / linelen / sleep / ignore / unsafe）只有「数什么」不一样，
+    其余（扫哪些文件、基线怎么读写、棘轮怎么判、怎么报）完全相同。流程搬到这里，
+    各门文件只剩自己的判据与文档字符串——否则七份样板互相雷同，dupe 门第一个不答应。
+    """
+    ap = argparse.ArgumentParser()
+    add_args(ap)
+    if extra_args:
+        extra_args(ap)
+    a = ap.parse_args()
+    cur = scan(ROOT, a)
+    total = sum(cur.values())
+    if head:
+        head(total, a)
+    else:
+        print(f"{name} count={total}")
+    if a.list:
+        for r, n in sorted(cur.items(), key=lambda kv: -kv[1])[:a.top]:
+            print(f"  {n:3d}  {r}")
+        return 0
+    bpath = ROOT / baseline_rel
+    if a.write:
+        write_baseline(bpath, cur)
+        print(f"已写基线 {baseline_rel}（{total} {label}）——此后只准减")
+        return 0
+    base = load_baseline(bpath)
+    if not base:
+        print("警告：无基线 ⇒ 不判；跑 --write 才会管住存量")
+    bad, shrank = [], []
+    ratchet(cur, base, label, bad, shrank)
+    return report(name, bad, shrank)
+
+
+def regex_scan(rx, per_line=False, prod_only=True, extra_skip=(), masked=True):
+    """「每个文件里某模式出现几次」的扫描器——返回可直接交给 `run_count_gate` 的 scan。"""
+    def scan(root, a):
+        cur = {}
+        for rel in rs_files(root, a.git_tracked):
+            if prod_only and (rel.startswith("tests/") or any(t in rel for t in TESTISH)):
+                continue
+            if extra_skip and any(d in rel for d in extra_skip):
+                continue
+            text = read_text(root, rel)
+            if not text:
+                continue
+            src = mask(text) if masked else text
+            n = (sum(1 for ln in src.splitlines() if rx.search(ln)) if per_line
+                 else len(rx.findall(src)))
+            if n:
+                cur[rel] = n
+        return cur
+    return scan

@@ -136,8 +136,10 @@ CI 里额外跑一次**注入自检**：`QJ_GATE_FORCE_FAIL=god-gate` 时门必�
 前面几道门管的是**规模**（多大）与**雷同**（几份）。这一组管的是「编译器不报、clippy 只 warn
 不拦、但代码评审每次都会挑」的坏味道。共性：
 
-- 全部**零依赖纯 stdlib**，复用 `scripts/gates/gates_common.py`（扫描面 / 基线读写 / 棘轮判定
-  只有一份实现 ⇒ 口径不会在各门之间漂移；Rust 感知掩码复用 `god_gate._mask`）；
+- 全部**零依赖纯 stdlib**，复用 `scripts/gates/gates_common.py`——扫描面 / 基线读写 / 棘轮判定，
+  连 `main` 流程（`run_count_gate`）与「每文件数某模式几次」（`regex_scan`）都只有一份实现
+  ⇒ 口径不会在各门之间漂移，各门文件只剩自己的判据与文档字符串；Rust 感知掩码复用
+  `god_gate._mask`；
 - 全部**排除测试面**（`/tests/`、`/examples/`、`/benches/`）——测试里 `unwrap()`、`sleep()` 是
   正当写法，算进去只会逼人把测试写歪；
 - 全部是**棘轮**：存量入基线，只准减，新增即红。不要求一次性还清历史债，但一个数都不许再涨。

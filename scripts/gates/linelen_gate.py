@@ -8,52 +8,31 @@
 
 用法：python3 -X utf8 scripts/gates/linelen_gate.py [--git-tracked] [--list] [--write] [--max 200]
 """
-import argparse
 import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import gates_common as gc  # noqa: E402
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
-BASELINE = "docs/review/linelen-baseline.json"
 MAX = 200
 
 
-def scan(root: pathlib.Path, git_tracked: bool, maxlen: int):
+def scan(root, a):
+    """行长是**唯一**不过 `regex_scan` 的计数门：它量的是原始文本长度，
+    过掩码会把注释与字符串抹掉——那量出来的就不是行长。测试文件同样受管。"""
     cur = {}
-    for rel in gc.rs_files(root, git_tracked):
+    for rel in gc.rs_files(root, a.git_tracked):
         text = gc.read_text(root, rel)
         if not text:
             continue
-        n = sum(1 for ln in text.splitlines() if len(ln) > maxlen)
+        n = sum(1 for ln in text.splitlines() if len(ln) > a.max)
         if n:
             cur[rel] = n
     return cur
 
 
-def main() -> int:
-    ap = gc.add_args(argparse.ArgumentParser())
-    ap.add_argument("--max", type=int, default=MAX)
-    a = ap.parse_args()
-    bpath = ROOT / BASELINE
-    cur = scan(ROOT, a.git_tracked, a.max)
-    print(f"LINELEN-GATE(>{a.max}) count={sum(cur.values())}")
-    if a.list:
-        for r, n in sorted(cur.items(), key=lambda kv: -kv[1])[:a.top]:
-            print(f"  {n:3d}  {r}")
-        return 0
-    if a.write:
-        gc.write_baseline(bpath, cur)
-        print(f"已写基线 {BASELINE}（{sum(cur.values())} 行>{a.max} 字符）——此后只准减")
-        return 0
-    base = gc.load_baseline(bpath)
-    if not base:
-        print("警告：无基线 ⇒ 不判；跑 --write 才会管住存量")
-    bad, shrank = [], []
-    gc.ratchet(cur, base, "linelen", bad, shrank)
-    return gc.report("LINELEN-GATE", bad, shrank)
-
-
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(gc.run_count_gate(
+        "LINELEN-GATE", "docs/review/linelen-baseline.json", scan, f"行>{MAX} 字符",
+        extra_args=lambda ap: ap.add_argument("--max", type=int, default=MAX),
+        head=lambda total, a: print(f"LINELEN-GATE(>{a.max}) count={total}")))
