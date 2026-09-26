@@ -394,54 +394,13 @@ fn clamp_anchor(anchor: (i32, i32), content: (i32, i32)) -> (i32, i32) {
 
 /// 纯几何部分，便于单测：贴边合法，越界拉回，内容比工作区还宽时钉在左/上。
 fn clamp_anchor_in(anchor: (i32, i32), content: (i32, i32), work: RECT) -> (i32, i32) {
-    let x = anchor.0.clamp(work.left, (work.right - content.0).max(work.left));
-    let y = anchor.1.clamp(work.top, (work.bottom - content.1).max(work.top));
+    let x = anchor
+        .0
+        .clamp(work.left, (work.right - content.0).max(work.left));
+    let y = anchor
+        .1
+        .clamp(work.top, (work.bottom - content.1).max(work.top));
     (x, y)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// 1080p 屏去掉任务栏量级的工作区。
-    const WORK: RECT = RECT {
-        left: 0,
-        top: 0,
-        right: 1920,
-        bottom: 1040,
-    };
-    const CONTENT: (i32, i32) = (120, 36);
-
-    #[test]
-    fn allows_flush_to_edges() {
-        // 左上贴边：锚点就是 (0, 0)，不再被阴影 margin 拉回
-        assert_eq!(clamp_anchor_in((0, 0), CONTENT, WORK), (0, 0));
-        // 右下贴边
-        assert_eq!(
-            clamp_anchor_in(
-                (WORK.right - CONTENT.0, WORK.bottom - CONTENT.1),
-                CONTENT,
-                WORK
-            ),
-            (WORK.right - CONTENT.0, WORK.bottom - CONTENT.1)
-        );
-    }
-
-    #[test]
-    fn keeps_content_visible() {
-        // 拖出左/上边界：拉回工作区
-        assert_eq!(clamp_anchor_in((-50, -50), CONTENT, WORK), (0, 0));
-        // 拖出右/下边界
-        assert_eq!(
-            clamp_anchor_in((3000, 2000), CONTENT, WORK),
-            (WORK.right - CONTENT.0, WORK.bottom - CONTENT.1)
-        );
-        // 内容比工作区还宽：钉在左/上，不越界
-        assert_eq!(
-            clamp_anchor_in((10, 10), (9999, CONTENT.1), WORK),
-            (0, 10)
-        );
-    }
 }
 
 fn placement_of(hwnd: HWND) -> Option<Rc<Placement>> {
@@ -486,5 +445,47 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             LRESULT(0)
         }
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 1080p 屏去掉任务栏量级的工作区。
+    const WORK: RECT = RECT {
+        left: 0,
+        top: 0,
+        right: 1920,
+        bottom: 1040,
+    };
+    const CONTENT: (i32, i32) = (120, 36);
+
+    #[test]
+    fn allows_flush_to_edges() {
+        // 左上贴边：锚点就是 (0, 0)，不再被阴影 margin 拉回
+        assert_eq!(clamp_anchor_in((0, 0), CONTENT, WORK), (0, 0));
+        // 右下贴边
+        assert_eq!(
+            clamp_anchor_in(
+                (WORK.right - CONTENT.0, WORK.bottom - CONTENT.1),
+                CONTENT,
+                WORK
+            ),
+            (WORK.right - CONTENT.0, WORK.bottom - CONTENT.1)
+        );
+    }
+
+    #[test]
+    fn keeps_content_visible() {
+        // 拖出左/上边界：拉回工作区
+        assert_eq!(clamp_anchor_in((-50, -50), CONTENT, WORK), (0, 0));
+        // 拖出右/下边界
+        assert_eq!(
+            clamp_anchor_in((3000, 2000), CONTENT, WORK),
+            (WORK.right - CONTENT.0, WORK.bottom - CONTENT.1)
+        );
+        // 内容比工作区还宽：钉在左/上，不越界
+        assert_eq!(clamp_anchor_in((10, 10), (9999, CONTENT.1), WORK), (0, 10));
     }
 }
