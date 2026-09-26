@@ -1,5 +1,6 @@
-# 三个 job：Linux 跑 fmt / clippy / 全 workspace 测试（排除 IMK 外壳）；macOS 与 Windows runner 各编各的壳并跑平台测试，
-# 平台特有的编译错（Objective-C 调用、TSF 导出、WinUI）在 PR 里就暴露，不等发版。仓库公开，Actions 不计费。
+# 五个 job：Linux 跑 fmt / clippy / 全 workspace 测试（排除 IMK 外壳）；macOS 与 Windows runner 各编各的壳并跑平台测试；
+# iOS / Android 对移动端目标做跨目标 cargo check（不链接，无需 SDK / NDK，排除桌面壳与平台不可用依赖，见各作业注释）。
+# 平台特有的编译错（Objective-C 调用、TSF 导出、WinUI、移动端目标破坏）在 PR 里就暴露，不等发版。仓库公开，Actions 不计费。
 # actions 一律钉到 commit（注释里是对应的标签），Dependabot 每周提 PR 更新；cargo 全加 --locked，Cargo.lock 没提交就报错。
 name: ci
 
@@ -103,3 +104,46 @@ jobs:
       # 安装包另带一份 32 位 DLL（企业微信 / WPS 这类 32 位应用只能加载它）
       - name: Check (TSF DLL, 32-bit)
         run: cargo check -p qingjian-windows-tsf --target i686-pc-windows-msvc --locked
+
+  # ---- 移动端目标编译检查（iOS / Android）----
+  # Core 声明平台无关，但依赖树混进目标不可用的东西时，只有跨目标 check 能在 PR 里暴露。
+  # cargo check 不链接：无需 NDK / iOS SDK，也无需模拟器，跑不了测试但能把目标级编译破坏挡在合入前。
+  # 桌面壳（IMK / TSF / Fcitx5 Server / 设置程序）绑定桌面框架，两个作业都排除。
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
+        with:
+          toolchain: 1.96.0
+          targets: aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # apple 目标上 native-tls 走 Security.framework，无 openssl，全 workspace 可查
+      - name: Check (aarch64-apple-ios)
+        run: cargo check --workspace --exclude qingjian-macos --exclude qingjian-linux-server --exclude qingjian-windows-server --exclude qingjian-windows-tsf --exclude qingjian-windows-settings --target aarch64-apple-ios --locked
+
+  android:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
+        with:
+          toolchain: 1.96.0
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # android 上 native-tls 落到 openssl-sys，而 platform -> predict -> async-openai -> reqwest(native-tls)
+      # 是硬依赖边，openssl-sys 的 build script 需要 NDK + 交叉 openssl，CI-only 作业装不动；
+      # 先把传染闭包（platform / predict / update / cli / tools）排除，只查引擎栈，
+      # 全量覆盖等 native-tls 换 rustls 或按目标门控后再放开（见 issue 移动端依赖阻碍）。
+      - name: Check (aarch64-linux-android)
+        run: cargo check --workspace --exclude qingjian-macos --exclude qingjian-linux-server --exclude qingjian-windows-server --exclude qingjian-windows-tsf --exclude qingjian-windows-settings --exclude qingjian-platform --exclude qingjian-predict --exclude qingjian-update --exclude qingjian-cli --exclude qingjian-gloss-gen --exclude qingjian-release-sign --target aarch64-linux-android --locked
