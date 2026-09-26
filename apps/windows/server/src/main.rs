@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use qingjian_core::{Engine, Language};
-use qingjian_platform::{Config, ConfigError, LogLevel, resources};
+use qingjian_platform::{Config, ConfigError, HoverFocusConfig, LogLevel, resources};
 use qingjian_windows_server::assembly::{glossary_file, learning_language};
 use qingjian_windows_server::{
     AssemblySpec, LanguageModelFiles, Router, RouterConfig, ServerError, assembly, dispatch,
@@ -224,7 +224,7 @@ fn main() {
         "青简 Windows Server 就绪"
     );
 
-    serve(router);
+    serve(router, config_path(), config.hover_focus.clone());
 }
 
 /// 日志目录 `%LOCALAPPDATA%\Qingjian\logs` 给 AppContainer 应用（任务栏搜索 / 设置）写权限：
@@ -252,10 +252,13 @@ fn grant_appcontainer_log_access() {
 
 /// 起 UI 线程作为候选窗口 / 状态条的输出端（失败退化为不画），再在命名管道上服务到进程结束。
 #[cfg(windows)]
-fn serve(mut router: Router) {
+fn serve(mut router: Router, config_path: Option<PathBuf>, hover_focus: HoverFocusConfig) {
     use qingjian_windows_server::ipc::{Work, pipe};
     use qingjian_windows_server::ui::UiHandle;
     grant_appcontainer_log_access();
+    // 悬停聚焦输入框：独立后台线程，跨进程 UI Automation SetFocus（详见 docs/design/hover-focus.md）。
+    // 总开关在配置里，关着时线程空转不动作；配置按文件热重载。
+    qingjian_windows_server::hover_focus::spawn(config_path.clone(), hover_focus);
     // 工人循环的活：各连接的消息 + 状态条上的操作（UI 线程投进来）。
     let (work_tx, work_rx) = std::sync::mpsc::channel::<Work>();
     let status_events = work_tx.clone();

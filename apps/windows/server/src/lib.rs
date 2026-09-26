@@ -3,6 +3,9 @@
 pub mod assembly;
 pub mod dispatch;
 pub mod error;
+/// 鼠标悬停置顶窗口自动聚焦输入框（step②）；仅 Windows。
+#[cfg(windows)]
+pub mod hover_focus;
 pub mod ipc;
 /// 候选窗口 / 状态条的自绘线程；仅 Windows。
 #[cfg(windows)]
