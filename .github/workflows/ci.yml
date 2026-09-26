@@ -1,5 +1,5 @@
-# 五个 job：Linux 跑 fmt / clippy / 全 workspace 测试（排除 IMK 外壳）；macOS 与 Windows runner 各编各的壳并跑平台测试；
-# iOS / Android 对移动端目标做跨目标 cargo check（不链接，无需 SDK / NDK，排除桌面壳与平台不可用依赖，见各作业注释）。
+# 六个 job：Linux 跑 fmt / clippy / 全 workspace 测试（排除 IMK 外壳）；macOS 与 Windows runner 各编各的壳并跑平台测试；
+# iOS / Android / OHOS（华为 HarmonyOS）对移动端目标做跨目标 cargo check（不链接，排除桌面壳与目标不可用依赖，见各作业注释）。
 # 平台特有的编译错（Objective-C 调用、TSF 导出、WinUI、移动端目标破坏）在 PR 里就暴露，不等发版。仓库公开，Actions 不计费。
 # actions 一律钉到 commit（注释里是对应的标签），Dependabot 每周提 PR 更新；cargo 全加 --locked，Cargo.lock 没提交就报错。
 name: ci
@@ -159,3 +159,43 @@ jobs:
       # 或按目标门控后再放开（见 issue #235）。render 同样排除（同 iOS 作业注释）。
       - name: Check (aarch64-linux-android)
         run: cargo check --workspace --exclude qingjian-macos --exclude qingjian-linux-server --exclude qingjian-windows-server --exclude qingjian-windows-tsf --exclude qingjian-windows-settings --exclude qingjian-platform --exclude qingjian-predict --exclude qingjian-update --exclude qingjian-cli --exclude qingjian-gloss-gen --exclude qingjian-release-sign --exclude qingjian-render --target aarch64-linux-android --locked
+
+  # ---- 华为手机（HarmonyOS / OpenHarmony）目标编译检查 ----
+  ohos:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
+        with:
+          toolchain: 1.96.0
+          targets: aarch64-unknown-linux-ohos
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # onig_sys（ferrous-opencc 的 C 依赖）要交叉编译；runner 不预装 OHOS SDK，从华为云
+      # 官方仓库拉，版本钉死 5.1.0-Release（URL 失效会先红在这，不会静默漂移）。
+      # tar 里是各子系统 zip，只解 native 的 linux-x64 包（llvm 工具链 + sysroot）。
+      - name: 下载并展开 OpenHarmony SDK 的 native 工具链
+        run: |
+          curl -fsSL --retry 2 -o /tmp/ohos-sdk.tar.gz \
+            "https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/ohos-sdk-windows_linux-public.tar.gz"
+          mkdir -p /tmp/ohos-sdk /tmp/ohos-native
+          tar -xzf /tmp/ohos-sdk.tar.gz -C /tmp/ohos-sdk
+          find /tmp/ohos-sdk -name "native-linux-x64-*.zip" -exec unzip -q {} -d /tmp/ohos-native \;
+          CLANG="$(find /tmp/ohos-native -type f -path "*llvm/bin/clang" | head -1)"
+          OHOS_NDK="$(dirname "$(dirname "$(dirname "$CLANG")")")"
+          {
+            echo "CC_aarch64_unknown_linux_ohos=$OHOS_NDK/llvm/bin/clang"
+            echo "CXX_aarch64_unknown_linux_ohos=$OHOS_NDK/llvm/bin/clang++"
+            echo "AR_aarch64_unknown_linux_ohos=$OHOS_NDK/llvm/bin/llvm-ar"
+            echo "CFLAGS_aarch64_unknown_linux_ohos=--target=aarch64-linux-ohos --sysroot=$OHOS_NDK/sysroot"
+            echo "CXXFLAGS_aarch64_unknown_linux_ohos=--target=aarch64-linux-ohos --sysroot=$OHOS_NDK/sysroot"
+          } >> "$GITHUB_ENV"
+
+      # 排除集与 Android 作业一致：ohos 同样是 native-tls 落 openssl 的目标（传染闭包见
+      # issue #235）；render 的字体发现模块只有三桌面实现（见 iOS 作业注释）。
+      - name: Check (aarch64-unknown-linux-ohos)
+        run: cargo check --workspace --exclude qingjian-macos --exclude qingjian-linux-server --exclude qingjian-windows-server --exclude qingjian-windows-tsf --exclude qingjian-windows-settings --exclude qingjian-platform --exclude qingjian-predict --exclude qingjian-update --exclude qingjian-cli --exclude qingjian-gloss-gen --exclude qingjian-release-sign --exclude qingjian-render --target aarch64-unknown-linux-ohos --locked
