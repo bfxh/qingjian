@@ -35,9 +35,21 @@ WORKFLOW = ROOT / ".github" / "workflows" / "gates.yml"
 HOOK = ROOT / ".githooks" / "pre-commit"
 CFG = GATES / "god.gate.json"
 BASELINES = [
-            ROOT / "docs" / "review" / "god-baseline.json",
+ROOT / "docs" / "review" / "god-baseline.json",
             ROOT / "docs" / "review" / "type-span-baseline.json",
+            ROOT / "docs" / "review" / "arch-baseline.json",
+            ROOT / "docs" / "review" / "cyc-baseline.json",
+            ROOT / "docs" / "review" / "dupe-baseline.json",
+            ROOT / "docs" / "review" / "linelen-baseline.json",
+            ROOT / "docs" / "review" / "log-baseline.json",
+            ROOT / "docs" / "review" / "nest-baseline.json",
+            ROOT / "docs" / "review" / "super-baseline.json",
+            ROOT / "docs" / "review" / "testsize-baseline.json",
+            ROOT / "docs" / "review" / "trait-baseline.json",
+            ROOT / "docs" / "review" / "unsafe-baseline.json",
+            ROOT / "docs" / "review" / "ignore-baseline.json",
 ]
+
 
 CI = ROOT / ".github" / "workflows" / "ci.yml"
 CLAIMS = ROOT / ".agents" / "CLAIMS.md"

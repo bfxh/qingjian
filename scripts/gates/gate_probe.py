@@ -58,11 +58,38 @@ PROBES = [
 ("god-gate", "god_gate.py",
      {"big.rs": rs("pub fn f() {\n" + "".join(f"    let x{i} = {i};\n" for i in range(820)) + "}\n")}),
 ("type-span", "type_span_gate.py", {"span.rs": many_methods(45)}),
+("arch-gate", "arch_gate.py", {"two.rs": rs("pub struct A;\npub enum B {}\n")}),
+("unwrap-gate", "unwrap_gate.py", {"u.rs": rs("pub fn f(a: Option<u32>) -> u32 { a.unwrap() }\n")}),
+("linelen-gate", "linelen_gate.py", {"long.rs": long_line(220)}),
+("sleep-gate", "sleep_gate.py",
+     {"s.rs": rs("pub fn f() { std::thread::sleep(std::time::Duration::from_millis(1)); }\n")}),
+("ignore-gate", "ignore_gate.py", {"i.rs": rs("pub fn f() {\n    let _ = 1;\n}\n")}),
+("unsafe-gate", "unsafe_gate.py", {"un.rs": rs("pub fn f() { unsafe { } }\n")}),
+("cyc-gate", "cyc_gate.py",
+     {"c.rs": rs("pub fn f(a: u32) -> u32 {\n    let mut s = 0u32;\n"
+                 + "".join(f"    if a > {i} {{ s += {i}; }}\n" for i in range(20))
+                 + "    match s { 0 => 1, _ => 2 }\n}\n")}),
+("nest-gate", "nest_gate.py", {"n.rs": deep(9)}),
+("args-gate", "args_gate.py",
+     {"a.rs": rs("pub fn f(" + ", ".join(f"p{i}: u32" for i in range(8)) + ") -> u32 { 0 }\n")}),
+("log-gate", "log_gate.py", {"l.rs": rs('pub fn f() { println!("x"); }\n')}),
+("trait-gate", "trait_gate.py",
+     {"t.rs": rs("pub trait Big {\n"
+                 + "".join(f"    fn m{i}(&self);\n" for i in range(16)) + "}\n")}),
+("super-gate", "super_gate.py", {"sup.rs": rs("use super::super::Whatever;\n")}),
+("testsize-gate", "testsize_gate.py",
+     {"ts.rs": HDR + "#[cfg(test)]\nmod t {\n"
+      + "".join(f"    // 填充 {i}\n" for i in range(210)) + "}\n"}),
+("prefix-gate", "prefix_gate.py",
+     {"zz_a.rs": rs("pub fn a() {}\n"), "zz_b.rs": rs("pub fn b() {}\n")}),
+("lang-gate", "lang_gate.py",
+     {"lang.rs": rs("pub struct Translation;\npub struct C { pub translations: Vec<Translation> }\n")}),
+("ident-gate", "ident_gate.py", {"id.rs": rs("pub struct 中文类型;\n")}),
 ]
 
 # 需要复制一份现有文件才能触发的（雷同门）
 COPIES = [
-
+("dupe-gate", "dupe_gate.py", "crates/qingjian-core/src/lib.rs"),
 ]
 
 # 需要往**已有**文件里注入的（写 .agents/claims 下的声明）
