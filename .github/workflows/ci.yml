@@ -177,28 +177,24 @@ jobs:
 
       # onig_sys（ferrous-opencc 的 C 依赖）要交叉编译；runner 不预装 OHOS SDK，从华为云
       # 官方仓库拉，版本钉死 5.1.0-Release（URL 失效会先红在这，不会静默漂移）。
-      # 整包 3.4GB 且 runner /tmp 余量有限：tar 只抽 native 的 zip，抽完立刻删 tar.gz，
-      # unzip 完再删 zip；组件 zip 名是 native-ohos-x64-*（5.1.0 实测，不是 -linux-）。
+      # 整包 3.2GB 且 runner /tmp 余量有限：tar 只抽 linux 子目录的 native zip（另两个
+      # native-*-x64 在 windows/ 与 ohos/ 下，llvm/bin/clang 不是 linux-x64 的 ELF，
+      # 误抽会 Exec format error），抽完删 tar.gz，unzip 用 -o——zip 里有重复条目。
       - name: 下载并展开 OpenHarmony SDK 的 native 工具链
         run: |
           curl -fsSL --retry 2 -o /tmp/ohos-sdk.tar.gz \
             "https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/ohos-sdk-windows_linux-public.tar.gz"
           mkdir -p /tmp/ohos-sdk /tmp/ohos-native
-          tar -xzf /tmp/ohos-sdk.tar.gz -C /tmp/ohos-sdk --wildcards "*native-*-x64-*.zip"
+          tar -xzf /tmp/ohos-sdk.tar.gz -C /tmp/ohos-sdk --wildcards "*linux/native-linux-x64-*.zip"
           rm -f /tmp/ohos-sdk.tar.gz
-          find /tmp/ohos-sdk -name "native-*-x64-*.zip" -exec unzip -q {} -d /tmp/ohos-native \;
+          find /tmp/ohos-sdk -name "native-linux-x64-*.zip" -exec unzip -oq {} -d /tmp/ohos-native \;
           rm -rf /tmp/ohos-sdk
-          # 定位用真实目录（sysroot/llvm），不用 clang 文件本身——SDK 里它是符号链接，
-          # find -type f 会漏掉（首跑 env 步算出空的 CLANG，CC 被写成 ./llvm/bin/clang）
+          # 定位用真实目录（sysroot/llvm），不用 clang 文件本身——SDK 里它是符号链接
           OHOS_NDK="$(dirname "$(find /tmp/ohos-native -type d -name sysroot | head -1)")"
           if [ ! -d "$OHOS_NDK" ]; then
             OHOS_NDK="$(dirname "$(dirname "$(find /tmp/ohos-native -type d -name llvm | head -1)")")"
           fi
-          if [ ! -x "$OHOS_NDK/llvm/bin/clang" ]; then
-            echo "未定位到 OHOS native 工具链，实际结构："
-            find /tmp/ohos-native -maxdepth 4 | head -40
-            exit 1
-          fi
+          "$OHOS_NDK/llvm/bin/clang" --version | head -1
           {
             echo "CC_aarch64_unknown_linux_ohos=$OHOS_NDK/llvm/bin/clang"
             echo "CXX_aarch64_unknown_linux_ohos=$OHOS_NDK/llvm/bin/clang++"
