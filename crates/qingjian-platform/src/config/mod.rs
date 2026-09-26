@@ -3,6 +3,7 @@ mod aux_code;
 mod candidate_renderer;
 mod dictionaries;
 mod general;
+mod hover_focus;
 mod key_combo;
 mod layout_mode;
 mod log_level;
@@ -36,6 +37,7 @@ pub use dictionaries::{DEFAULT_DOMAINS, DictionariesConfig};
 pub use general::{
     DEFAULT_PAGE_KEYS, GeneralConfig, LEARNING_LANGUAGE_OFF, MAX_PAGE_SIZE, PAGE_KEY_OPTIONS,
 };
+pub use hover_focus::HoverFocusConfig;
 pub use key_combo::KeyCombo;
 pub use layout_mode::LayoutMode;
 pub use log_level::LogLevel;
@@ -77,6 +79,9 @@ pub struct Config {
 
     /// 按应用改行为（哪些应用里英文模式不给候选）。
     pub apps: AppsConfig,
+
+    /// 悬停聚焦输入框：鼠标移到某 app 置顶窗口的输入框上时自动设为系统焦点（详见 docs/design/hover-focus.md）。
+    pub hover_focus: HoverFocusConfig,
 
     /// 云联想。
     pub predict: PredictConfig,
@@ -343,6 +348,19 @@ enabled = false
 # 记住的屏幕位置（物理像素，拖动后自动写入）；留空则首次出现在屏幕右下角
 # x = 0
 # y = 0
+
+[hover_focus]
+# 悬停聚焦输入框：鼠标移到某 app 置顶窗口的输入框上时，自动把那个输入框设为系统焦点，不用先点一下就能直接打字。
+# 详见 docs/design/hover-focus.md。所有 app 通用，只这一个总开关；个别 app 想关掉用下面的 disabled_apps。
+# 缺省开。
+enabled = true
+# 光标在输入框上停留多少毫秒才聚焦（去抖）：划过不抢焦点，停稳才动。缺省 150
+throttle_ms = 150
+# 密码 / 安全框跳过（与 IS_PRIVATE 对齐，私密路径不碰）。缺省开
+skip_password = true
+# 安全排除名单：这些 app 里不悬停聚焦。条目是 bundle identifier（macOS）/ exe 文件名（Windows）/ fcitx5 program 名（Linux），
+# `*` 结尾按前缀匹配、不区分大小写；空数组 = 所有 app 都生效。游戏全屏、终端这类不想被抢焦点的可列在这里
+disabled_apps = []
 
 [update]
 # 检查更新：每天向官网（qingjian.app）读一次版本索引，有新版在菜单与设置的「关于」页提示；请求不带任何标识，不自动下载安装

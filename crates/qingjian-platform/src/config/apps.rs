@@ -127,7 +127,8 @@ impl AppsConfig {
 }
 
 /// `pattern` 是完整的应用标识，或 `*` 结尾的前缀。不区分大小写（bundle identifier 与 Windows 文件名本身都不区分）。
-fn matches_app(pattern: &str, app: &str) -> bool {
+/// `pub(crate)` 以便 [HoverFocusConfig](super::hover_focus::HoverFocusConfig) 的 disabled_apps 复用同一套匹配。
+pub(crate) fn matches_app(pattern: &str, app: &str) -> bool {
     let pattern = pattern.trim();
     match pattern.strip_suffix('*') {
         Some(prefix) => {
