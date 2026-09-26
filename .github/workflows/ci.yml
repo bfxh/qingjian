@@ -188,8 +188,17 @@ jobs:
           rm -f /tmp/ohos-sdk.tar.gz
           find /tmp/ohos-sdk -name "native-*-x64-*.zip" -exec unzip -q {} -d /tmp/ohos-native \;
           rm -rf /tmp/ohos-sdk
-          CLANG="$(find /tmp/ohos-native -type f -path "*llvm/bin/clang" | head -1)"
-          OHOS_NDK="$(dirname "$(dirname "$(dirname "$CLANG")")")"
+          # 定位用真实目录（sysroot/llvm），不用 clang 文件本身——SDK 里它是符号链接，
+          # find -type f 会漏掉（首跑 env 步算出空的 CLANG，CC 被写成 ./llvm/bin/clang）
+          OHOS_NDK="$(dirname "$(find /tmp/ohos-native -type d -name sysroot | head -1)")"
+          if [ ! -d "$OHOS_NDK" ]; then
+            OHOS_NDK="$(dirname "$(dirname "$(find /tmp/ohos-native -type d -name llvm | head -1)")")"
+          fi
+          if [ ! -x "$OHOS_NDK/llvm/bin/clang" ]; then
+            echo "未定位到 OHOS native 工具链，实际结构："
+            find /tmp/ohos-native -maxdepth 4 | head -40
+            exit 1
+          fi
           {
             echo "CC_aarch64_unknown_linux_ohos=$OHOS_NDK/llvm/bin/clang"
             echo "CXX_aarch64_unknown_linux_ohos=$OHOS_NDK/llvm/bin/clang++"
