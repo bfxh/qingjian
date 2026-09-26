@@ -177,14 +177,17 @@ jobs:
 
       # onig_sys（ferrous-opencc 的 C 依赖）要交叉编译；runner 不预装 OHOS SDK，从华为云
       # 官方仓库拉，版本钉死 5.1.0-Release（URL 失效会先红在这，不会静默漂移）。
-      # tar 里是各子系统 zip，只解 native 的 linux-x64 包（llvm 工具链 + sysroot）。
+      # 整包 3.4GB 且 runner /tmp 余量有限：tar 只抽 native 的 zip，抽完立刻删 tar.gz，
+      # unzip 完再删 zip；组件 zip 名是 native-ohos-x64-*（5.1.0 实测，不是 -linux-）。
       - name: 下载并展开 OpenHarmony SDK 的 native 工具链
         run: |
           curl -fsSL --retry 2 -o /tmp/ohos-sdk.tar.gz \
             "https://repo.huaweicloud.com/openharmony/os/5.1.0-Release/ohos-sdk-windows_linux-public.tar.gz"
           mkdir -p /tmp/ohos-sdk /tmp/ohos-native
-          tar -xzf /tmp/ohos-sdk.tar.gz -C /tmp/ohos-sdk
-          find /tmp/ohos-sdk -name "native-linux-x64-*.zip" -exec unzip -q {} -d /tmp/ohos-native \;
+          tar -xzf /tmp/ohos-sdk.tar.gz -C /tmp/ohos-sdk --wildcards "*native-*-x64-*.zip"
+          rm -f /tmp/ohos-sdk.tar.gz
+          find /tmp/ohos-sdk -name "native-*-x64-*.zip" -exec unzip -q {} -d /tmp/ohos-native \;
+          rm -rf /tmp/ohos-sdk
           CLANG="$(find /tmp/ohos-native -type f -path "*llvm/bin/clang" | head -1)"
           OHOS_NDK="$(dirname "$(dirname "$(dirname "$CLANG")")")"
           {
