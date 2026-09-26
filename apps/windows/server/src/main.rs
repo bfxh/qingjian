@@ -5,7 +5,9 @@
 use std::path::{Path, PathBuf};
 
 use qingjian_core::{Engine, Language};
-use qingjian_platform::{Config, ConfigError, HoverFocusConfig, LogLevel, resources};
+#[cfg(windows)]
+use qingjian_platform::HoverFocusConfig;
+use qingjian_platform::{Config, ConfigError, LogLevel, resources};
 use qingjian_windows_server::assembly::{glossary_file, learning_language};
 use qingjian_windows_server::{
     AssemblySpec, LanguageModelFiles, Router, RouterConfig, ServerError, assembly, dispatch,
@@ -224,7 +226,10 @@ fn main() {
         "青简 Windows Server 就绪"
     );
 
+    #[cfg(windows)]
     serve(router, config_path(), config.hover_focus.clone());
+    #[cfg(not(windows))]
+    serve(router);
 }
 
 /// 日志目录 `%LOCALAPPDATA%\Qingjian\logs` 给 AppContainer 应用（任务栏搜索 / 设置）写权限：
