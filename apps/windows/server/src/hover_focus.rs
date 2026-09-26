@@ -77,10 +77,10 @@ fn run(path: Option<std::path::PathBuf>, initial: HoverFocusConfig) {
         thread::sleep(POLL);
 
         if last_reload.elapsed() >= RELOAD_EVERY {
-            if let Some(path) = &path {
-                if let Ok(loaded) = Config::load(path) {
-                    cfg = loaded.hover_focus;
-                }
+            if let Some(path) = &path
+                && let Ok(loaded) = Config::load(path)
+            {
+                cfg = loaded.hover_focus;
             }
             last_reload = Instant::now();
         }
@@ -114,12 +114,12 @@ fn run(path: Option<std::path::PathBuf>, initial: HoverFocusConfig) {
         }
 
         // 安全泄压阀：该 app 在 disabled_apps 里就跳过。
-        if let Some(exe) = exe_name(fg_pid) {
-            if cfg.disabled_app(&exe) {
-                stayed_hwnd = None;
-                stable_since = None;
-                continue;
-            }
+        if let Some(exe) = exe_name(fg_pid)
+            && cfg.disabled_app(&exe)
+        {
+            stayed_hwnd = None;
+            stable_since = None;
+            continue;
         }
 
         // 光标下的可编辑控件；取不到 / 不是可编辑 / 密码框 / 不可聚焦 / 已有焦点 → 不动。
@@ -188,14 +188,13 @@ fn run(path: Option<std::path::PathBuf>, initial: HoverFocusConfig) {
                 stable_since = Some(Instant::now());
             }
         }
-        if let Some(since) = stable_since {
-            if since.elapsed() >= Duration::from_millis(cfg.throttle_ms) {
-                if unsafe { element.SetFocus() }.is_ok() {
-                    // 设成功：清空停留，必须离开再回来才会再次聚焦（已有焦点那分支也会拦重入）。
-                    stayed_hwnd = None;
-                    stable_since = None;
-                }
-            }
+        if let Some(since) = stable_since
+            && since.elapsed() >= Duration::from_millis(cfg.throttle_ms)
+            && unsafe { element.SetFocus() }.is_ok()
+        {
+            // 设成功：清空停留，必须离开再回来才会再次聚焦（已有焦点那分支也会拦重入）。
+            stayed_hwnd = None;
+            stable_since = None;
         }
     }
 }
