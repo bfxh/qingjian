@@ -52,4 +52,4 @@
 
 英文来源为ESDB、CSpell和typos，许可声明见[英文sources](05_english/README.md#sources)。
 
-本数据包不以单一许可证覆盖所有来源。上游文件、版本及质量参考见相邻的[资源归档](../输入法词库资源_2026-09-05/README.md)。
+本数据包不以单一许可证覆盖所有来源。逐来源的许可声明见 [00_meta](00_meta/)（THUOCL 为 MIT，保留原文）；上游文件、版本与质量核对记录见 `summary.json` 与 `polyphone-judgments.tsv`。
