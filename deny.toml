@@ -3,6 +3,10 @@
 #
 # 只管「依赖进来时该问的问题」：来源是不是钉死的、许可证能不能分发、有没有已知漏洞。
 # 不管代码风格与测试覆盖（那些在 clippy / cargo test 里）。
+#
+# 版本耦合：这份配置照着 cargo-deny 0.20 写的，CI 用的 cargo-deny-action@v2.1.1 正好装 0.20.2。
+# 换 action 版本前先看它 Dockerfile 里的 deny_version —— 旧版（如 v2.0.6 装的 0.18.0）解析不了
+# 这里的写法，报的错长得像配置写错了，其实是 cargo-deny 版本太老。
 
 [graph]
 # Cargo.lock 提交了，锁文件就是依赖图的唯一真相

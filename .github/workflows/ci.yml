@@ -45,8 +45,12 @@ jobs:
       # cosmic-text fork、有没有同一 crate 的多个版本在编译。
       # 实测：接进来时立刻报出 ttf-parser 与 paste 两个 unmaintained（RUSTSEC-2026-0192 / RUSTSEC-2024-0436），
       # 两者都在 transitive 依赖里且无安全升级，已在 deny.toml 里逐条写了理由与退出条件。
+      #
+      # 版本必须挑对：这个 action 在 Docker 镜像里装一个写死的 cargo-deny（v2.1.1 → 0.20.2）。
+      # 用旧版（v2.0.6 → cargo-deny 0.18.0）会解析不了 deny.toml ——报 expected a `<bare-gnu-license>`
+      # 之类，跟配置写得对不对无关。升 action 时先看一眼它的 Dockerfile 里的 deny_version。
       - name: Install cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@v2.0.6
+        uses: EmbarkStudios/cargo-deny-action@v2.1.1
         with:
           command: check
           manifest-path: Cargo.toml
@@ -82,6 +86,14 @@ jobs:
       # 上游也踩过同一个坑：40e3e55「修正两处指向不存在页面 / 锚点的链接」。
       - name: Documentation links
         run: python3 tools/ci/check_doc_links.py .
+
+      # 文档链接指向 cfg 门控模块的那一类。跟上面那条是两种不同的失效，单独一步：
+      # [`pipe`] 这类链接在Windows 上 `cargo doc` 正常、换到 Linux runner 才报 unresolved，
+      # 本地永远验不到自己不支持的那半边 cfg，所以静态扫而不是靠 cargo 验。
+      # 实测：接进来时报出 2 处（apps/windows/server/src/ipc、apps/windows/tsf/src/client，均已修），
+      # 其中一处是 CI 先报出来的、静态扫又补出另一处。
+      - name: Documentation links (cfg-gated modules)
+        run: python3 tools/ci/check_cfg_doc_links.py .
 
   core:
     runs-on: ubuntu-26.04
