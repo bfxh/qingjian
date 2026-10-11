@@ -72,14 +72,16 @@ jobs:
         run: cargo machete
 
       # shellcheck 覆盖仓库里全部 .sh（原来只有 4 个 Linux 脚本过 bash -n，macOS 的 bundle.sh、
-      # tools/release/ 下 8 个发版脚本、tools/eval/sweep.sh 都没被任何检查扫过）。
+      # tools/release/ 下 8 个发版脚本、tools/eval/sweep.sh、assets/icon 下 2 个画图标脚本
+      # 都没被任何检查扫过）。
       # severity=warning：只挡真问题（SC2155 声明与赋值合一会吞掉返回值、SC2086 未加引号的变量展开等），
       # 不管 style / info 级别的风格建议。--external-sources 让 shellcheck 跟着 source 走。
+      # 用 -z | xargs -0 而不是 $(git ls-files)：后者按空格拆词，将来有文件名带空格就会被拆成两个不存在的路径。
       - name: Shell scripts
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
-          shellcheck --severity=warning --external-sources $(git ls-files '*.sh')
+          git ls-files -z '*.sh' | xargs -0 shellcheck --severity=warning --external-sources
 
       # 文档里的相对链接与锚点。实测：接进来时报出 CHANGELOG.md 里当示例写的 `[名称](链接)`、
       # assets/lexicon/README.md 指向一个不在仓库里的相邻归档目录（均已修）。
@@ -160,8 +162,9 @@ jobs:
       # bash -n 只查语法，查不出未加引号的变量展开之类；真正的静态检查在 gates job 的 shellcheck，
       # 这里保留语法检查是因为它能在改动刚进来时就报，不用等 shellcheck 那一步。
       # 覆盖全仓库的 .sh（原来只有 4 个 Linux 脚本在列），macOS 的 bundle.sh 与发版脚本也算进来。
+      # 同样用 -z | xargs -0，避免文件名带空格时被拆词。
       - name: Validate shell scripts
-        run: bash -n $(git ls-files '*.sh')
+        run: git ls-files -z '*.sh' | xargs -0 bash -n
 
       - name: Test Linux installation
         shell: bash
