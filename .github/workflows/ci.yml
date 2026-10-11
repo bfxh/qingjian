@@ -89,6 +89,7 @@ jobs:
       - name: Documentation links
         run: python3 tools/ci/check_doc_links.py .
 
+
       # 文档链接指向 cfg 门控模块的那一类。跟上面那条是两种不同的失效，单独一步：
       # [`pipe`] 这类链接在Windows 上 `cargo doc` 正常、换到 Linux runner 才报 unresolved，
       # 本地永远验不到自己不支持的那半边 cfg，所以静态扫而不是靠 cargo 验。
@@ -96,6 +97,13 @@ jobs:
       # 其中一处是 CI 先报出来的、静态扫又补出另一处。
       - name: Documentation links (cfg-gated modules)
         run: python3 tools/ci/check_cfg_doc_links.py .
+
+      # CHANGELOG 的发版格式。发版流程靠标题取版本说明、靠「网盘：」行取官网镜像链接，
+      # 但 releases_json.py 只在推 v* 标签时才被调用（release.yml 的 Create draft release），
+      # PR 阶段没有任何检查碰它——标题写错要等版本已经在发了才发现。
+      # 判据与 tools/release/releases_json.py 的 HEADING / CHANNELS 保持一致。
+      - name: Changelog format
+        run: python3 tools/ci/check_changelog.py CHANGELOG.md
 
   core:
     runs-on: ubuntu-26.04
@@ -230,6 +238,20 @@ jobs:
       - name: Test (Server, TSF DLL, Settings)
         run: cargo test -p qingjian-windows-server -p qingjian-windows-tsf -p qingjian-windows-settings --locked
 
-      # 安装包另带一份 32 位 DLL（企业微信 / WPS 这类 32 位应用只能加载它）
+      # 安装包另带一份 32 位 DLL（企业微信 / WPS 这类 32 位应用只能加载它）。
+      # 原来只 cargo check：能编过就放过，clippy 的 lint 与测试都不跑。
+      # 32 位是 usize / 指针宽度与 x64 不同的一侧，位掩码、`size_of` 转 u32 这类地方
+      # （com/mode/icon.rs、com/window_class.rs 里都有 size_of::<...>() as u32）
+      # 只有在这个 target 上过一遍 clippy 才算数。
+      - name: Clippy (TSF DLL, 32-bit)
+        run: cargo clippy -p qingjian-windows-tsf --target i686-pc-windows-msvc --all-targets --locked -- -D warnings
+
+      # 32 位的测试二进制在 x64 runner 上直接能跑（WOW64）。TSF 的测试都在纯逻辑模块
+      # （key layout / tap / key_sink / launch），不碰 COM 与窗口，不依赖桌面会话。
+      - name: Test (TSF DLL, 32-bit)
+        run: cargo test -p qingjian-windows-tsf --target i686-pc-windows-msvc --locked
+
+      # check 仍留着：它是上面两步的前置（clippy / test 自己也会编依赖，显式 check 能把
+      # 「编不过」与「lint 不过」分开报）
       - name: Check (TSF DLL, 32-bit)
         run: cargo check -p qingjian-windows-tsf --target i686-pc-windows-msvc --locked
