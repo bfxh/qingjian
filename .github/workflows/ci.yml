@@ -1,6 +1,11 @@
-# 三个 job：Linux 跑 fmt / clippy / 全 workspace 测试（排除 IMK 外壳）；macOS 与 Windows runner 各编各的壳并跑平台测试，
-# 平台特有的编译错（Objective-C 调用、TSF 导出、WinUI）在 PR 里就暴露，不等发版。仓库公开，Actions 不计费。
+# 四个 job：gates 跑与平台无关的静态门禁（依赖 / 许可证 / 脚本 / 文档 / 未用依赖）；
+# Linux 跑 fmt / clippy / 全 workspace 测试（排除 IMK 外壳）与 Fcitx5 面板；
+# macOS 与 Windows runner 各编各的壳并跑平台测试，平台特有的编译错（Objective-C 调用、TSF 导出、WinUI）在 PR 里就暴露，不等发版。
+# 仓库公开，Actions 不计费。
 # actions 一律钉到 commit（注释里是对应的标签），Dependabot 每周提 PR 更新；cargo 全加 --locked，Cargo.lock 没提交就报错。
+#
+# 新加的门禁都只做「找问题」这一件事，不掺任何组织决策（不碰 CODEOWNERS、发版审批、手动发版入口）：
+#   gates 里每一项都在本地或上游历史里验过能真报错，见各项注释里写的「实测」。
 name: ci
 
 on:
@@ -19,6 +24,79 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # 与平台无关的静态门禁：不跑测试，只回答「有没有东西不对」。
+  # 单独一个 job 是因为它不需要装 Fcitx5 / MSVC，失败时也能立刻看出是内容问题而不是环境问题。
+  gates:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
+        with:
+          toolchain: 1.96.0
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # 依赖漏洞 / 许可证 / 依赖来源 / 重复版本。audit.yml 只查 RUSTSEC 漏洞，
+      # 这里补上它不管的三件事：许可证能不能随包分发、依赖是不是只来自 crates.io 与那个钉死的
+      # cosmic-text fork、有没有同一 crate 的多个版本在编译。
+      # 实测：接进来时立刻报出 ttf-parser 与 paste 两个 unmaintained（RUSTSEC-2026-0192 / RUSTSEC-2024-0436），
+      # 两者都在 transitive 依赖里且无安全升级，已在 deny.toml 里逐条写了理由与退出条件。
+      #
+      # 版本必须挑对：这个 action 在 Docker 镜像里装一个写死的 cargo-deny（v2.1.1 → 0.20.2）。
+      # 用旧版（v2.0.6 → cargo-deny 0.18.0）会解析不了 deny.toml ——报 expected a `<bare-gnu-license>`
+      # 之类，跟配置写得对不对无关。升 action 时先看一眼它的 Dockerfile 里的 deny_version。
+      - name: Install cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2.1.1
+        with:
+          command: check
+          manifest-path: Cargo.toml
+          # action 的 arguments 默认是 `--all-features`，这里必须覆盖掉：
+          # 一是新版 cargo-deny 的 check 子命令根本不接受这个参数（直接报 unexpected argument），
+          # 二是本仓库的 qingjian-neural 有 macOS 专用的 accelerate feature，
+          # 在 Linux 上把 features 全开本身就编不过。依赖范围由 Cargo.lock（--locked）定，
+          # feature 的编译检查由 clippy / test 各平台 job 负责。
+          arguments: --locked
+
+      # 声明了却没用到的依赖：不报错就只会一年年攒着，白占编译时间和攻击面。
+      # 实测：接进来时抓出 crates/qingjian-format 声明了未用的 tracing（已删）。
+      # 直接从源码装，版本钉死。没有用 cargo-binstall：它要 rustc ≥ 1.96.1，而本仓库钉的是
+      # 1.96.0，会以「cannot install package cargo-binstall, it requires rustc 1.96.1 or newer」失败。
+      # 也没有官方维护的 cargo-machete action。这一个 crate 编译几十秒，值得换确定性。
+      - name: Unused dependencies
+        run: cargo install cargo-machete --version 0.9.2 --locked
+      - name: Unused dependencies (check)
+        run: cargo machete
+
+      # shellcheck 覆盖仓库里全部 .sh（原来只有 4 个 Linux 脚本过 bash -n，macOS 的 bundle.sh、
+      # tools/release/ 下 8 个发版脚本、tools/eval/sweep.sh、assets/icon 下 2 个画图标脚本
+      # 都没被任何检查扫过）。
+      # severity=warning：只挡真问题（SC2155 声明与赋值合一会吞掉返回值、SC2086 未加引号的变量展开等），
+      # 不管 style / info 级别的风格建议。--external-sources 让 shellcheck 跟着 source 走。
+      # 用 -z | xargs -0 而不是 $(git ls-files)：后者按空格拆词，将来有文件名带空格就会被拆成两个不存在的路径。
+      - name: Shell scripts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          git ls-files -z '*.sh' | xargs -0 shellcheck --severity=warning --external-sources
+
+      # 文档里的相对链接与锚点。实测：接进来时报出 CHANGELOG.md 里当示例写的 `[名称](链接)`、
+      # assets/lexicon/README.md 指向一个不在仓库里的相邻归档目录（均已修）。
+      # 上游也踩过同一个坑：40e3e55「修正两处指向不存在页面 / 锚点的链接」。
+      - name: Documentation links
+        run: python3 tools/ci/check_doc_links.py .
+
+      # 文档链接指向 cfg 门控模块的那一类。跟上面那条是两种不同的失效，单独一步：
+      # [`pipe`] 这类链接在Windows 上 `cargo doc` 正常、换到 Linux runner 才报 unresolved，
+      # 本地永远验不到自己不支持的那半边 cfg，所以静态扫而不是靠 cargo 验。
+      # 实测：接进来时报出 2 处（apps/windows/server/src/ipc、apps/windows/tsf/src/client，均已修），
+      # 其中一处是 CI 先报出来的、静态扫又补出另一处。
+      - name: Documentation links (cfg-gated modules)
+        run: python3 tools/ci/check_cfg_doc_links.py .
+
   core:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -45,8 +123,23 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --exclude qingjian-macos --all-targets --locked -- -D warnings
 
+      # 文档里指向私有项、指向不存在的模块、没转义的 <TAB> 之类，在 rustdoc 里全是 error，
+      # 但默认构建只打 warning，攒着没人看。实测：接进来时报出 12 处（均已修）。
+      # 只跑 Linux 能编的那部分：qingjian-macos 的文档要 Objective-C 工具链，在 macos job 里查。
+      - name: Documentation (rustdoc)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --exclude qingjian-macos --no-deps --locked
+
       - name: Test
         run: cargo test --workspace --exclude qingjian-macos --locked
+
+      # 发出去的是 release 构建，而 release 默认关掉 debug_assertions 与整数溢出检查：
+      # 同一段算术在 debug 下溢出即 panic 被测试逮到，在 release 下静默回绕，测试却全绿。
+      # 这里用 release profile 再跑一遍核心 crate，让测试跑在真正发出去的语义上。
+      # 只跑不依赖 GPU / 平台壳的四个 crate（core 307 + dictionary 37 + lm 4 + format 2 个测试，本地约 30s）。
+      - name: Test (release profile)
+        run: cargo test --release -p qingjian-core -p qingjian-dictionary -p qingjian-lm -p qingjian-format --locked
 
       - name: Build Linux server
         run: cargo build -p qingjian-linux-server --locked
@@ -66,8 +159,12 @@ jobs:
           mkdir -p target/ci-logs
           env -u DBUS_SESSION_BUS_ADDRESS ctest --test-dir target/fcitx5-stage1 --output-on-failure 2>&1 | tee target/ci-logs/fcitx5-ctest.log
 
-      - name: Validate Linux install scripts
-        run: bash -n apps/linux/scripts/install.sh apps/linux/scripts/uninstall.sh apps/linux/scripts/package.sh apps/linux/scripts/package-install.sh
+      # bash -n 只查语法，查不出未加引号的变量展开之类；真正的静态检查在 gates job 的 shellcheck，
+      # 这里保留语法检查是因为它能在改动刚进来时就报，不用等 shellcheck 那一步。
+      # 覆盖全仓库的 .sh（原来只有 4 个 Linux 脚本在列），macOS 的 bundle.sh 与发版脚本也算进来。
+      # 同样用 -z | xargs -0，避免文件名带空格时被拆词。
+      - name: Validate shell scripts
+        run: git ls-files -z '*.sh' | xargs -0 bash -n
 
       - name: Test Linux installation
         shell: bash

@@ -1,0 +1,85 @@
+# cargo-deny 的门禁配置：依赖来源、许可证、重复版本、已知漏洞。
+# CI 跑 `cargo deny check`（advisories / bans / licenses / sources 四项全查），配置在 .github/workflows/ci.yml。
+#
+# 只管「依赖进来时该问的问题」：来源是不是钉死的、许可证能不能分发、有没有已知漏洞。
+# 不管代码风格与测试覆盖（那些在 clippy / cargo test 里）。
+#
+# 版本耦合：这份配置照着 cargo-deny 0.20 写的，CI 用的 cargo-deny-action@v2.1.1 正好装 0.20.2。
+# 换 action 版本前先看它 Dockerfile 里的 deny_version —— 旧版（如 v2.0.6 装的 0.18.0）解析不了
+# 这里的写法，报的错长得像配置写错了，其实是 cargo-deny 版本太老。
+
+[graph]
+# Cargo.lock 提交了，锁文件就是依赖图的唯一真相
+all-features = false
+no-default-features = false
+
+[advisories]
+version = 2
+# yanked（撤回）只警告：撤回不等于当前有风险，是历史信息
+yanked = "warn"
+# unmaintained（作者声明不再维护）默认已是deny，这里写明意图：
+# RUSTSEC-2026-0192 ttf-parser 就是这种情况
+ignore = [
+    # ttf-parser 作者已声明不再维护（harfbuzz/ttf-parser#217），RustSec 归类为 unmaintained 而非漏洞。
+    # 依赖链：qingjian-render -> cosmic-text -> fontdb -> ttf-parser。
+    # 没有安全升级：fontdb 0.23 钉的是 ttf-parser 0.25，fontdb 换 skrifa 是它自己的大版本改动。
+    # 风险可控：ttf-parser 只在字体解析路径上做只读解析，不吃网络输入、不碰特权内存，
+    # 且 cosmic-text 是本项目 fork 的（qingjian-team/cosmic-text，源码已知可审计）。
+    # 退出条件：上游 fontdb 或 cosmic-text 换成 skrifa / oxidize 系的字体栈，就删掉这行。
+    { id = "RUSTSEC-2026-0192", reason = "fontdb 0.23 依赖链上的只读字体解析库，作者声明不再维护；无安全升级，替代要等上游换栈" },
+    # paste 作者已归档仓库（dtolnay/paste），归类 unmaintained 而非漏洞。
+    # 依赖链：qingjian-neural -> candle-nn -> candle-core -> gemm -> paste。
+    # paste 只是编译期的宏拼接（proc-macro），不产运行时代码、不吃任何输入，没有可利用面。
+    # 没有安全升级：candle 0.11 的 gemm 钉死了 paste 1.0。
+    # 退出条件：candle 换掉 paste（上游已有 pastey / with_builtin_macros 这些替代）时删掉这行。
+    { id = "RUSTSEC-2024-0436", reason = "candle-core -> gemm 的编译期宏依赖，无运行时代码与可利用面；替代要等 candle 换栈" },
+]
+
+[bans]
+# 重复版本只警告不阻断：windows-rs 一家（windows 0.62 与 windows-core 0.100 并存）是已知的、
+# 只能整家一起升的组合，见 .github/dependabot.yml 里那段 ignore 的理由。
+multiple-versions = "warn"
+# 通配依赖检查关掉：它把子 crate 里的 `qingjian-core.workspace = true` 也算成通配，
+# 而「依赖版本统一在workspace 的 [workspace.dependencies] 里定、子 crate 一律 workspace = true」
+# 正是本项目的约定（Cargo.toml 顶部有注释说明），不是可以顺手放宽的默认。
+# 真正的版本风险由 `multiple-versions` 与 `--locked` 管。
+wildcards = "allow"
+
+[licenses]
+# 本仓库是 GPL-3.0-or-later，分发出去的安装包必须与依赖的许可证兼容。
+version = 2
+# 依赖树里实际存在的许可证，不是可以随手放宽的默认值：
+#   - 宽松许可（MIT / Apache-2.0 / BSD / ISC / Zlib / 0BSD / Unlicense / BSL-1.0…）来自 crates.io 上的依赖
+#   - Unicode-3.0 来自字体与编码表那一片（fontdb / cosmic-text / ttf-parser 一家，20 个 crate）
+#   - GPL-3.0-or-later 是本项目自己的 20 个 workspace crate，随包分发没有问题
+# 不在名单里的许可证会让这一步直接红，改依赖前先想清楚分发义务。
+# 名单按当前依赖树逐条核对过（cargo metadata 取全量 license 表达式比对），
+# 不留「以防万一」的空条目：cargo-deny 会把没遇到过的报成 license-not-encountered 警告，
+# 那种条目只会掩盖真正新增的许可证。
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+    "ISC",
+    "MIT",
+    "Zlib",
+    "BSL-1.0",
+    "Unlicense",
+    "Unicode-3.0",
+    "GPL-3.0-or-later",
+]
+# 出现在依赖树里、但需要人工读过才能放进上面 allow 的，先列出来，改 allow 时会看到清单
+confidence-threshold = 0.9
+
+[sources]
+# crates.io 之外只允许一处 git 依赖：cosmic-text 的 opsz 光学字号补丁在 qingjian-team 的 fork，
+# 钉死了 rev。上游收了这个改动就删掉 Cargo.toml 里 [patch.crates-io] 段，这里也一并删掉。
+# 钉 rev 是硬要求（deny 的 unknown-git 兜底），Cargo.toml 里那行本来也是钉 rev 的。
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = [
+    "https://github.com/qingjian-team/cosmic-text",
+]
