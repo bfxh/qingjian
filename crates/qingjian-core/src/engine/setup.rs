@@ -302,6 +302,17 @@ impl Engine {
         self.interpolation
     }
 
+    /// 换一组整句搜索规模（回放调参用）；**格子候选缓存必须作废**——候选留几条由它决定，
+    /// 不清就会把上一组限制算出的候选当成新的用，改限制像没生效一样。
+    pub fn set_search_limits(&mut self, limits: sentence::SearchLimits) {
+        self.search_limits = limits;
+        self.forget_span_cache();
+    }
+
+    pub fn search_limits(&self) -> sentence::SearchLimits {
+        self.search_limits
+    }
+
     /// 换一组敲错纠正代价（回放调参用）；整句格子缓存与纠错缓存作废。
     pub fn set_typo_costs(&mut self, costs: TypoCosts) {
         self.typo_costs = costs;
