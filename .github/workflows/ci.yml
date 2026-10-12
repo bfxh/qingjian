@@ -38,7 +38,11 @@ jobs:
         with:
           toolchain: 1.96.0
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # 这里**不放 rust-cache**：这个 job 不构建本项目，缓存对它没有收益——
+      # cargo-deny 走自己的 Docker 镜像、shellcheck 与三个 Python 检查不碰 cargo，
+      # 唯一用 cargo 的是 `cargo install cargo-machete`（编的是 machete 自己，不是项目依赖）。
+      # 实测放过一次：每次白下载 64MB（.cargo/registry + target/），gates 从 1m4s 里省不出什么，
+      # 反而把缓存体积和 restore 时间搭进去。core / macos / windows 三个真构建的 job 保留缓存。
 
       # 依赖漏洞 / 许可证 / 依赖来源 / 重复版本。audit.yml 只查 RUSTSEC 漏洞，
       # 这里补上它不管的三件事：许可证能不能随包分发、依赖是不是只来自 crates.io 与那个钉死的
@@ -50,7 +54,9 @@ jobs:
       # 用旧版（v2.0.6 → cargo-deny 0.18.0）会解析不了 deny.toml ——报 expected a `<bare-gnu-license>`
       # 之类，跟配置写得对不对无关。升 action 时先看一眼它的 Dockerfile 里的 deny_version。
       - name: Install cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@v2.1.1
+        # 钉 commit 而不是 tag：tag 可以被强推改写，commit 不可变。本文件顶部那句
+        # 「actions 一律钉到 commit」说的就是这件事，这个 action 原来漏了（用的是 v2.1.1 tag）。
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
           manifest-path: Cargo.toml

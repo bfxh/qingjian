@@ -7,21 +7,40 @@
 才发现，而那时候版本已经在发了。
 
 所以这里把「跟格式有关」的部分单独拎出来，在 PR 阶段就能验，纯离线、不碰网络。
-判据与 tools/release/releases_json.py 里的 HEADING / CHANNELS 保持一致，改那边记得同步改这里。
+
+判据（HEADING / CHANNELS）**直接从 tools/release/releases_json.py 导入**，不在这边复制一份：
+曾经是各写一遍、只靠注释说「改那边记得同步这里」，那种约定迟早会漂移——改了发版那边的正则
+而忘了这边，这道门禁就按旧规则放行，比没有门禁更糟（看着绿、实际没验）。
 
   tools/ci/check_changelog.py            # 校验 CHANGELOG.md
   tools/ci/check_changelog.py path.md    # 校验别的文件
 """
 
+import importlib.util
 import os
 import re
 import sys
+from pathlib import Path
 
-HEADING = re.compile(
-    r"^##\s+(?P<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\s*·\s*"
-    r"(?P<date>\d{4}-\d{2}-\d{2}|未发布)\s*·\s*(?P<channel>\S+)\s*$"
-)
-CHANNELS = ("alpha", "beta", "rc", "stable")
+# 发版脚本在 tools/release/ 下，按本文件位置推过去；它带 `if __name__ == "__main__"` 守卫，
+# 导入不会触发 argparse 与网络访问。
+_RELEASE_SCRIPT = Path(__file__).resolve().parent.parent / "release" / "releases_json.py"
+
+
+def _load_release_module():
+    spec = importlib.util.spec_from_file_location("qingjian_releases_json", _RELEASE_SCRIPT)
+    if spec is None or spec.loader is None:  # pragma: no cover - 路径错就是部署错了
+        raise SystemExit(f"找不到发版脚本 {_RELEASE_SCRIPT}，无法借用它的判据")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_releases = _load_release_module()
+# 单一来源：正则与渠道枚举都以发版脚本为准
+HEADING = _releases.HEADING
+CHANNELS = _releases.CHANNELS
+
 MIRROR_LINE = re.compile(r"^网盘[：:]")
 MIRROR_LINK = re.compile(r"\[(?P<name>[^\]]+)\]\((?P<url>https?://[^)\s]+)\)")
 ITEM = re.compile(r"^- ")
