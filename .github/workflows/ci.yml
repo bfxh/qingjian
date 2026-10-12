@@ -193,7 +193,10 @@ jobs:
             target/fcitx5-stage1/CMakeFiles/CMakeError.log
 
   macos:
-    runs-on: macos-latest
+    # macos-26 与 release.yml 的发版 job 同一个 label：同一个仓库里 macOS 侧只有一个版本，
+    # 少了「CI 过、发版挂」这类只在发版时暴露的差异（系统库、Xcode 命令行工具版本）。
+    # 原来是 macos-latest，那个标签会随 GitHub 的策略漂移。
+    runs-on: macos-26
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
