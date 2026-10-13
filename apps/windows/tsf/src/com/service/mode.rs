@@ -184,6 +184,20 @@ impl TextService_Impl {
         }
     }
 
+    /// 本线程得到 / 失去键盘焦点。失去：先把敲了一半的拼音原样落定。
+    ///
+    /// 切到别的应用（命令行、终端这类抢焦点的窗口）时 `ITfKeyEventSink::OnSetFocus` 不触发，
+    /// 走的是 `ITfThreadFocusSink::OnKillThreadFocus`（见 [`crate::com::focus`]），两条路都进这里。
+    /// 那边也落定的原因是：不落定的话拼音留在 Server 缓冲里，切回**同一个**应用时 Server 认作
+    /// 同一会话、`ensure_focus` 不清缓冲，接着敲就接在旧拼音后面，候选窗口也一直挂着。
+    /// 组句中才真有东西要落定（`commit_pending` 自己会判），没在组句时这条是空转。
+    pub(super) fn set_focus(&self, foreground: bool) {
+        if !foreground {
+            self.commit_pending();
+        }
+        self.set_thread_focus(foreground);
+    }
+
     /// 本线程得到 / 失去键盘焦点。得到：补连接，跟上全局模式（别的应用里可能刚切过）。
     pub(super) fn set_thread_focus(&self, foreground: bool) {
         if self.shared.foreground() == foreground {
@@ -284,5 +298,27 @@ impl TextService_Impl {
         {
             let _ = unsafe { mgr.RemoveItem(&button) };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use windows::core::ComObject;
+
+    use super::super::TextService;
+
+    /// 组句中被切走（点到命令行这类抢焦点的窗口）而 Server 又连不上：本地组句状态也得清掉。
+    /// 不清的话 `would_eat` 一直当在组句、功能键全被吃掉，看着就是「输入法停了」。
+    /// 连得上时 `commit_pending` 还会把拼音原样落进文档，那条走
+    /// `service/document.rs` 与 Server 侧 `focus_leave_commits_raw_pinyin`，不在这里重复。
+    #[test]
+    fn losing_focus_while_composing_clears_the_local_state() {
+        let service: ComObject<TextService> = TextService::new().into();
+        service.shared.set_composing(true);
+        service.set_focus(false);
+        assert!(
+            !service.shared.composing(),
+            "失焦后不该还当作在组句，否则功能键一直被吃掉"
+        );
     }
 }

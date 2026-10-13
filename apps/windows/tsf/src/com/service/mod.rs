@@ -143,9 +143,9 @@ pub(super) fn on_keyboard_open_changed() {
     with_active(TextService_Impl::sync_from_keyboard_open);
 }
 
-/// 本线程得到 / 失去了键盘焦点（见 [`super::focus`]）。
+/// 本线程得到 / 失去了键盘焦点（见 [`super::focus`]）。失去时落定组句（[`TextService_Impl::set_focus`]）。
 pub(super) fn on_thread_focus(foreground: bool) {
-    with_active(|service| service.set_thread_focus(foreground));
+    with_active(|service| service.set_focus(foreground));
 }
 
 /// 轮询发现前台会话没连着 Server（见 [`super::poll`]）：补连一次。

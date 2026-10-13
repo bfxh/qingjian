@@ -414,7 +414,14 @@ CC-CEDICT 表（`dict-convert cedict`）保留为备用来源，覆盖面广但�
 - **IPC 协议**：`qingjian-platform::protocol`，Server ↔ DLL 两端共用、全部 serde。`ClientMessage`（DLL → Server：
   开 / 关会话、按键、上屏、回上下文、回选区、报中英模式）与 `ServerMessage`（Server → DLL：按键结果、上屏结果、异步重绘、请求上下文、请求选区）；
   失焦 / 停用时 DLL 发 `Commit`，Server 回 `Committed { text }`（缓冲区原样交出，对应 macOS 的 `commitComposition`），
-  DLL 用最近收键记下的 `ITfContext` 经编辑会话落进文档；应用强行终止组句（`OnCompositionTerminated`）时拼音已被框架定成普通文本，
+  DLL 用最近收键记下的 `ITfContext` 经编辑会话落进文档。**「失焦」有两条路，都汇到 `TextService_Impl::set_focus`**：
+  线程内换文档走 `ITfKeyEventSink::OnSetFocus`，切到别的应用（命令行、终端这类抢焦点的窗口）走
+  `ITfThreadFocusSink::OnKillThreadFocus`——后者才是切窗口时真正触发的那条（`OnSetFocus` 不触发），
+  两边都得落定，否则拼音留在 Server 缓冲里，切回**同一个**应用时 Server 认作同一会话、`ensure_focus` 不清缓冲，
+  接着敲就接在旧拼音后面，候选窗口也一直挂着；
+  连接断开（应用被关 / 崩了，DLL 来不及发 `CloseSession`）时 `ipc::pump` 记下的、本连接开过的会话
+  由 Server 自己 `CloseSession` 掉，同一个循环线上的命名管道与测试里的内存流共用，收尾行为不会出现两份；
+  应用强行终止组句（`OnCompositionTerminated`）时拼音已被框架定成普通文本，
   DLL 只记「Server 缓冲过期」，下次说话前先 `Commit` 并丢掉交出的文本，不再插一次。
   中英模式：**Windows 与 macOS 机制不同**。macOS 用 Caps Lock 当中英切换键；Windows 按本地习惯，单击切换键在中 / 英间翻转，
   切换键由 `[shortcut] switch_mode` 勾选（`SwitchKeys`：单击 `shift`（缺省）/ 单击 `control` / `ctrl+alt+space`，可多选，空列表 = 不用键切），

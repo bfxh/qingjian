@@ -20,14 +20,10 @@ use crate::com::key::preserved;
 use crate::com::log::log;
 
 impl ITfKeyEventSink_Impl for TextService_Impl {
-    /// 失焦：把敲了一半的拼音原样落定（对应 macOS 的 `commitComposition`）。焦点本身交给
-    /// [`TextService_Impl::set_thread_focus`]；切窗口时这条回调不触发，靠的是 [`crate::com::focus`]。
+    /// 失焦：把敲了一半的拼音原样落定（对应 macOS 的 `commitComposition`）。切窗口时这条回调不触发，
+    /// 靠的是 [`crate::com::focus`]；两条路都汇到 [`TextService_Impl::set_focus`]，落定只有一份。
     fn OnSetFocus(&self, fforeground: BOOL) -> Result<()> {
-        let foreground = fforeground.as_bool();
-        if !foreground {
-            self.commit_pending();
-        }
-        self.set_thread_focus(foreground);
+        self.set_focus(fforeground.as_bool());
         Ok(())
     }
 
