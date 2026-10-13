@@ -188,7 +188,7 @@ pub enum Setting {
     /// `[general] wubi`，勾选框：勾上是五笔（86 版）。与拼音同时开着就是混输。
     Wubi,
 
-    /// [general] traditional，勾选框：繁体输出。
+    /// `[general] traditional`，勾选框：繁体输出。
     Traditional,
 
     /// `[general] log_level`，勾选框：勾上是 debug。

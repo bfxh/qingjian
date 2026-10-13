@@ -17,7 +17,12 @@ permissions:
 
 jobs:
   audit:
-    runs-on: ubuntu-latest
+    # ubuntu-26.04 与 ci.yml / release.yml 一致：仓库里其它 job 都钉这个，
+    # 只有这里是 ubuntu-latest。那个标签会随 GitHub 的策略漂移（现在指向的版本
+    # 与 26.04 不同），同一个仓库三套 Ubuntu 版本，出问题时会多一个变量。
+    runs-on: ubuntu-26.04
+    # 只是 cargo audit 一次，给 15 分钟够宽松；没有超时的定时任务卡住不会有人发现
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -2,8 +2,10 @@
 //! 这些高 z-band 宿主盖住，只有本进程配合 uiAccess 签名才能盖过）。
 //!
 //! HWND 线程亲和：Router 在工人线程上产出内容，经通道 + `PostThreadMessageW` 唤醒交给 UI 线程应用。
-//! 线程句柄是 [`UiHandle`]，命令在 [`command`]，候选窗口在 [`candidates`]，符号面板在 [`panel`]，状态条在 [`status`]，
-//! 分层窗口合成在 [`layered`]。
+//! 线程句柄是 `UiHandle`，命令在 `command`，候选窗口在 `candidates`，符号面板在 `panel`，状态条在 `status`，
+//! 分层窗口合成在 `layered`。
+//! 这一整个模块是 `#[cfg(windows)]`：`cargo doc` 的门禁跑在 Linux runner 上，看不见这里，
+//! 所以 windows job 里也跑一遍（见 ci.yml 的 Documentation (rustdoc, Windows)）。
 
 mod candidates;
 mod command;

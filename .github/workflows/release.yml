@@ -30,9 +30,19 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# 同一个标签重复推送（改错标签再推一次、或手滑 re-tag）时排队，不并发。
+# **不能 cancel-in-progress**：CI 里取消旧运行没损失，发版流程取消会留下半成品——
+# draft release 已建、部分平台的包已上传、checksums 合了一半、releases.json 可能签了一半。
+# 那种状态下重跑，finish-release.sh 面对的是「草稿里已有本次运行的资产」，容易重复上传或漏合。
+# 让它跑完（哪怕是失败）比重跑安全：失败会停在草稿，人工看一眼就能决定重推还是收尾。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   prepare:
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     permissions:
       contents: write
     outputs:
@@ -112,10 +122,25 @@ jobs:
           PRERELEASE=(); [[ "$VERSION" == *-* ]] && PRERELEASE=(--prerelease --latest=false)
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$TITLE" --notes-file "$NOTES" ${PRERELEASE[@]+"${PRERELEASE[@]}"}
 
+      # 门禁（版本号 / 标签在 main 上）失败时把 notes.md 留下：那是 releases_json.py
+      # 从 CHANGELOG 解析出来的版本说明，解析失败（标题格式不对、版本不在 CHANGELOG 里）
+      # 时它是空文件或半截——能直接看出是解析问题还是版本号问题。
+      # 不设 target/**/*.log：这一步没有 cargo 参与，那些路径本来就是空的。
+      - name: Upload prepare diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75d540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-prepare-diagnostics
+          path: |
+            ${{ runner.temp }}/notes.md
+          if-no-files-found: ignore
+          retention-days: 7
+
   macos:
     needs: prepare
     if: needs.prepare.outputs.macos == 'true'
     runs-on: macos-26
+    timeout-minutes: 45
     permissions:
       contents: write
     env:
@@ -183,20 +208,42 @@ jobs:
           echo "QINGJIAN_NOTARY_PROFILE=qingjian" >> "$GITHUB_ENV"
 
       - name: Build pkg (arm64)
-        run: QINGJIAN_TARGET=aarch64-apple-darwin apps/macos/scripts/bundle.sh --pkg
+        # shell: bash 带 pipefail：`| tee` 不会把 bundle.sh 的失败吞成 tee 的 0
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/target/ci-logs"
+          QINGJIAN_TARGET=aarch64-apple-darwin apps/macos/scripts/bundle.sh --pkg 2>&1 \
+            | tee "$GITHUB_WORKSPACE/target/ci-logs/bundle-arm64.log"
 
       - name: Build pkg (x86_64)
-        run: QINGJIAN_TARGET=x86_64-apple-darwin apps/macos/scripts/bundle.sh --pkg
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/target/ci-logs"
+          QINGJIAN_TARGET=x86_64-apple-darwin apps/macos/scripts/bundle.sh --pkg 2>&1 \
+            | tee "$GITHUB_WORKSPACE/target/ci-logs/bundle-x86_64.log"
 
       - name: Upload to draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: tools/release/upload-build.sh macos "macOS $(sw_vers -productVersion)" target/pkg/*.pkg
 
+      # 失败时把 bundle.sh 的输出打包上传：macOS 打包这一步最麻烦（两个 target、
+      # 签名、component.plist、pkgbuild），失败信息全在 bundle.sh 自己的输出里。
+      # 只收文本日志，不收 .pkg 本体（几百 MB）。
+      - name: Upload macOS diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75d540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-macos-diagnostics
+          path: target/ci-logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
   windows:
     needs: prepare
     if: needs.prepare.outputs.windows == 'true'
     runs-on: windows-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     defaults:
@@ -245,19 +292,38 @@ jobs:
           & "${env:ProgramFiles}\Inno Setup 7\ISCC.exe" --version
 
       - name: Build installer
+        # pwsh 下用 Tee-Object 落盘：安装器失败（Inno Setup 脚本、签名、资源编译）时
+        # 这是唯一能回看 build.ps1 自己输出的地方。
+        # 目录用 $env:GITHUB_WORKSPACE 拼绝对路径：build.ps1 自己按脚本位置算仓库根
+        # （$PSScriptRoot 上跳三层），对当前目录不敏感；这里显式锚到 workspace，
+        # 免得将来有步骤改了工作目录，日志落到别处、诊断上传收空。
         shell: pwsh
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File apps\windows\installer\build.ps1
+        run: |
+          $logs = Join-Path $env:GITHUB_WORKSPACE 'target\ci-logs'
+          New-Item -ItemType Directory -Force $logs | Out-Null
+          powershell -NoProfile -ExecutionPolicy Bypass -File apps\windows\installer\build.ps1 2>&1 |
+            Tee-Object -FilePath (Join-Path $logs 'installer.log')
 
       - name: Upload to draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: tools/release/upload-build.sh windows "$(powershell -NoProfile -Command '(Get-CimInstance Win32_OperatingSystem).Caption' | tr -d '\r')" target/installer/*.exe
 
+      - name: Upload Windows diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75d540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-windows-diagnostics
+          path: target/ci-logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
   linux:
     needs: prepare
     if: needs.prepare.outputs.linux == 'true'
     # Fcitx5 插件链接的是构建机上的 Fcitx5，与已验证的 Ubuntu 26.04 一致
     runs-on: ubuntu-26.04
+    timeout-minutes: 25
     permissions:
       contents: write
     env:
@@ -286,33 +352,54 @@ jobs:
           ls -la data/generated data/generated/dicts data/models/hanzhang-zhiwei data/models/hanzhang-tongbian
 
       - name: Build package
-        run: apps/linux/scripts/package.sh
-
-      # 装进临时目录再卸载：包里文件齐、校验过得去、两个二进制在这台机器上找得到全部动态库
-      - name: Smoke-test package
+        shell: bash
         run: |
-          work="$RUNNER_TEMP/package-test"
-          mkdir -p "$work"
-          tar -xzf target/linux-package/*.tar.gz -C "$work"
-          cd "$work"/qingjian-*/
-          export XDG_DATA_HOME="$work/data"
-          ./install.sh --prefix "$work/prefix"
-          for binary in "$work/prefix/bin/qingjian-linux-server" "$work/prefix/lib/fcitx5/qingjian.so"; do
-            if ldd "$binary" | grep 'not found'; then exit 1; fi
-          done
-          ./uninstall.sh --prefix "$work/prefix"
-          test ! -e "$work/prefix/bin/qingjian-linux-server"
+          mkdir -p "$GITHUB_WORKSPACE/target/ci-logs"
+          apps/linux/scripts/package.sh 2>&1 | tee "$GITHUB_WORKSPACE/target/ci-logs/package.log"
+
+      # 装进临时目录再卸载：包里文件齐、校验过得去、两个二进制在这台机器上找得到全部动态库。
+      # shell: bash 带 pipefail，`| tee` 不会把失败吞成 tee 的 0——诊断上传靠它触发。
+      # 整段套进 { ...; } 2>&1 | tee：管道退出码取花括号组的，任一句失败都算整段失败
+      # （花括号组是当前 shell 里的复合命令，退出码是组内最后一条失败命令的）。
+      - name: Smoke-test package
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/target/ci-logs"
+          {
+            work="$RUNNER_TEMP/package-test"
+            mkdir -p "$work"
+            tar -xzf target/linux-package/*.tar.gz -C "$work"
+            cd "$work"/qingjian-*/
+            export XDG_DATA_HOME="$work/data"
+            ./install.sh --prefix "$work/prefix"
+            for binary in "$work/prefix/bin/qingjian-linux-server" "$work/prefix/lib/fcitx5/qingjian.so"; do
+              if ldd "$binary" | grep 'not found'; then exit 1; fi
+            done
+            ./uninstall.sh --prefix "$work/prefix"
+            test ! -e "$work/prefix/bin/qingjian-linux-server"
+          } 2>&1 | tee "$GITHUB_WORKSPACE/target/ci-logs/smoke-test.log"
 
       - name: Upload to draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: tools/release/upload-build.sh linux "$(. /etc/os-release && echo "$PRETTY_NAME"), Fcitx5 $(pkg-config --modversion Fcitx5Core)" target/linux-package/*.tar.gz
 
+      # 与 ci.yml 的 core job 同一个思路：打包 / 冒烟测试失败时日志是唯一线索。
+      - name: Upload Linux diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75d540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-linux-diagnostics
+          path: target/ci-logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
   publish:
     needs: [prepare, macos, windows, linux]
     # 没选中的平台是 skipped，照样发；有平台失败就停在草稿
     if: ${{ !cancelled() && needs.prepare.result == 'success' && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
@@ -347,3 +434,18 @@ jobs:
         env:
           QINGJIAN_WEB_TOKEN: ${{ secrets.QINGJIAN_WEB_TOKEN }}
         run: tools/release/bump-website.sh
+
+      # publish 是最后一道：合 checksums、签 releases.json、触发官网构建。
+      # 这里失败最危险——草稿已是完整的一版，但索引没签 / 官网没更新，
+      # 用户侧表现为「Release 页有新版、客户端却不提示」。
+      # $RUNNER_TEMP/release 里是 finish-release.sh 真实下载又合成的
+      # SHA256SUMS / build-info.json 与各平台片段，失败时能直接看出合到哪一步、
+      # 哪个平台的片段缺失。
+      - name: Upload publish diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75d540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-publish-diagnostics
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: ignore
+          retention-days: 7
