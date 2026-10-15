@@ -7,18 +7,10 @@ on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    # 每天 UTC 02:00 跑一遍。PR 与 push 只会覆盖「改动到的那部分」：
-    # 没人碰的文件坏了不会有人发现，定时跑一遍让它在没人推代码的时候也能暴露。
-    # 顺带把偶发的测试抖出来——并行跑时状态泄漏依赖调度顺序，只在本地或某次 PR 上
-    # 撞见的 flaky 测试，这里每天给一次机会。
-    - cron: '0 2 * * *'
 
 permissions:
   contents: read
 
-# 定时跑要能取消上一次没跑完的：同一仓库里 ci-<ref> 一个组，后来的把前面的顶掉。
-# 与 release.yml 的区别在那里是发版（取消会留半建的草稿 Release），这里只是检查，取消了无副作用。
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -117,7 +109,6 @@ jobs:
         run: cargo test -p qingjian-macos --locked
 
   windows:
-    if: github.event_name != 'schedule'
     runs-on: windows-latest
     timeout-minutes: 15
     env:
