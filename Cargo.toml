@@ -27,19 +27,19 @@ all = "warn"
 
 [workspace.dependencies]
 # 内部 crate
-qingjian-core = { path = "crates/qingjian-core" }
-qingjian-dictionary = { path = "crates/qingjian-dictionary" }
-qingjian-translate = { path = "crates/qingjian-translate" }
-qingjian-learning = { path = "crates/qingjian-learning" }
-qingjian-platform = { path = "crates/qingjian-platform" }
-qingjian-predict = { path = "crates/qingjian-predict" }
-qingjian-lm = { path = "crates/qingjian-lm" }
-qingjian-format = { path = "crates/qingjian-format" }
-qingjian-neural = { path = "crates/qingjian-neural" }
-qingjian-render = { path = "crates/qingjian-render" }
-qingjian-update = { path = "crates/qingjian-update" }
+qingjian-core = { version = "0.1.1", path = "crates/qingjian-core" }
+qingjian-dictionary = { version = "0.1.1", path = "crates/qingjian-dictionary" }
+qingjian-translate = { version = "0.1.1", path = "crates/qingjian-translate" }
+qingjian-learning = { version = "0.1.1", path = "crates/qingjian-learning" }
+qingjian-platform = { version = "0.1.1", path = "crates/qingjian-platform" }
+qingjian-predict = { version = "0.1.1", path = "crates/qingjian-predict" }
+qingjian-lm = { version = "0.1.1", path = "crates/qingjian-lm" }
+qingjian-format = { version = "0.1.1", path = "crates/qingjian-format" }
+qingjian-neural = { version = "0.1.1", path = "crates/qingjian-neural" }
+qingjian-render = { version = "0.1.1", path = "crates/qingjian-render" }
+qingjian-update = { version = "0.1.1", path = "crates/qingjian-update" }
 # 自绘 UI 引擎：候选窗、状态条、设置程序都画在它上面
-bamboo-slip = { path = "crates/bamboo-slip" }
+bamboo-slip = { version = "0.1.1", path = "crates/bamboo-slip" }
 
 # 外部依赖统一在这里定版本，子 crate 一律 `xxx.workspace = true`
 serde = { version = "1.0.229", features = ["derive"] }
