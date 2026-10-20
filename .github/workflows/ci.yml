@@ -87,6 +87,21 @@ jobs:
             target/fcitx5-stage1/CMakeFiles/CMakeOutput.log
             target/fcitx5-stage1/CMakeFiles/CMakeError.log
 
+  shellcheck:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # 静态检查所有 shell 脚本：安装脚本、发版脚本、图标渲染脚本都在里面。
+      # ubuntu runner 自带 shellcheck，无需额外安装步骤。
+      # 只报 warning 及以上——style/info 级噪音太多，会淹掉真问题。
+      # 用 git ls-files 而不是 find：只管纳入版本控制的文件。
+      - name: Shellcheck
+        run: shellcheck -S warning $(git ls-files "*.sh")
+
   macos:
     runs-on: macos-latest
     timeout-minutes: 15
