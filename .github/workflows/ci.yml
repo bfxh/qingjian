@@ -224,3 +224,36 @@ jobs:
       # 安装包另带一份 32 位 DLL（企业微信 / WPS 这类 32 位应用只能加载它）
       - name: Check (TSF DLL, 32-bit)
         run: cargo check -p qingjian-windows-tsf --target i686-pc-windows-msvc --locked
+
+  coverage:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # 覆盖率插桩要 llvm-tools-preview；工具链版本与 core job 一致
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.96.0
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # qingjian-linux-server 在 workspace 里，编它得有 Fcitx5 的头文件，与 core job 同一套
+      - name: Install Fcitx5 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libfcitx5core-dev libfcitx5config-dev libfcitx5utils-dev nlohmann-json3-dev fcitx5
+
+      # 与 core job 的 cargo-deny 一样用 cargo install 钉版本，少一个要钉 commit 的第三方 action
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --version 0.9.1 --locked
+
+      # 只卡行覆盖率下限，当 ratchet 用：掉了就说明有人合了没被测试碰到的代码。
+      # 基线 71.90%（57078 行 / 未覆盖 16040，1.96.0 实测三次：16040 / 16040 / 16043），阈值取 71，留约 0.9 个点给 runner 差异；
+      # 实测 --fail-under-lines 71.9 退出 1、71 退出 0，这条门禁是真会拦的。
+      # 注意 --summary-only 的表头顺序是 Regions / Functions / Lines，第一列的 70.89% 是 region 覆盖率，不是行。
+      - name: Coverage
+        run: cargo llvm-cov --workspace --exclude qingjian-macos --locked --summary-only --fail-under-lines 71
