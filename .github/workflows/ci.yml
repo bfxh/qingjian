@@ -87,6 +87,23 @@ jobs:
             target/fcitx5-stage1/CMakeFiles/CMakeOutput.log
             target/fcitx5-stage1/CMakeFiles/CMakeError.log
 
+  secrets:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # 默认 fetch-depth 是 1，只拉最新一次提交。gitleaks 要扫全量历史，
+          # 否则「历史上提交过、后来删掉」的密钥根本看不到，门禁形同虚设。
+          fetch-depth: 0
+
+      # 密钥扫描：默认规则集 + 仓库根 .gitleaksignore 里的已知误报指纹。
+      # 新增误报时把 fingerprint 追加进 .gitleaksignore，不要去改规则集。
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   macos:
     runs-on: macos-latest
     timeout-minutes: 15

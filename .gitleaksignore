@@ -1,0 +1,7 @@
+# gitleaks 已知误报清单（fingerprint 由 `gitleaks detect --report-path` 产出）
+#
+# 下面这条命中 crates/qingjian-platform/src/logs/secrets/mod.rs 的是**测试夹具**：
+# 该模块的功能就是把已注册的密钥在日志里打码，测试必然要写一把假钥匙
+# （sk-test-0123456789abcdef，字面就带 test）来验证打码确实生效。
+# 它不是真密钥，但 generic-api-key 规则会命中，故加入忽略名单。
+6010e8149be8cc23781abec41ed8e9b492c6b5d2:crates/qingjian-platform/src/logs/secrets/mod.rs:generic-api-key:57
