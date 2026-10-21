@@ -252,3 +252,34 @@ jobs:
       # 安装包另带一份 32 位 DLL（企业微信 / WPS 这类 32 位应用只能加载它）
       - name: Check (TSF DLL, 32-bit)
         run: cargo check -p qingjian-windows-tsf --target i686-pc-windows-msvc --locked
+
+# 覆盖率门禁：行覆盖率低于 71% 直接红。锁与 Cargo.toml 一致性由别的 --locked 步骤负责。
+# 用 cargo-llvm-cov 而不是 tarpaulin：前者基于 LLVM 插桩、覆盖单元 + 集成 + doctest，
+# 且能直接吃 --workspace 一次性扫全仓；版本钉死，与 workflow 里别的 cargo 子命令一致。
+# 插桩组件走 dtolnay/rust-toolchain 的 components: llvm-tools-preview（少一个要钉 commit 的第三方 action）。
+  coverage:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.96.0
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # 与 core job 同款：qingjian-linux-server 编译需要 fcitx5 开发库
+      - name: Install Fcitx5 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libfcitx5core-dev libfcitx5config-dev libfcitx5utils-dev nlohmann-json3-dev fcitx5
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --version 0.9.1 --locked
+
+      - name: Coverage
+        run: cargo llvm-cov --workspace --exclude qingjian-macos --locked --summary-only --fail-under-lines 71
