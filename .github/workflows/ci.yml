@@ -252,3 +252,28 @@ jobs:
       # 安装包另带一份 32 位 DLL（企业微信 / WPS 这类 32 位应用只能加载它）
       - name: Check (TSF DLL, 32-bit)
         run: cargo check -p qingjian-windows-tsf --target i686-pc-windows-msvc --locked
+
+# 未用依赖门禁：静态扫描 workspace 里声明了但代码里一处都没用到的依赖。
+# 漏删的死依赖会拖慢编译、膨胀许可证/漏洞审计面（cargo-deny / audit 也要跟着扫）。
+# 用 cargo-machete 而不用 cargo-udeps：machete 纯静态、不编译、不挑 toolchain，
+# 且对 dev-dependency / build.rs 的误报可用 [package.metadata.cargo-machete] ignored 收敛。
+# 版本钉死，与 workflow 里别的 cargo 子命令一致。
+  unused-deps:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.96.0
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Install cargo-machete
+        run: cargo install cargo-machete --version 0.9.2 --locked
+
+      - name: Unused dependencies
+        run: cargo machete
