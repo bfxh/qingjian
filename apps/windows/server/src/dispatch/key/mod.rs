@@ -5,6 +5,7 @@ mod click;
 mod codes;
 mod effect;
 mod input;
+mod menu;
 mod panel;
 mod shortcut;
 
@@ -29,3 +30,6 @@ fn with_prefix(prefix: Option<String>, effect: Effect, c: char) -> Effect {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod traditional_tests;

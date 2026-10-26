@@ -64,31 +64,38 @@ impl Engine {
     ///
     /// 上屏候选的译文而不是候选本身（壳里修饰键 + 数字）：学习、拼音消耗都和选了这个候选一样，
     /// 返回第 `sense` 条释义的译文（0 是第一条，日文不带注音）。候选没有那么多条释义时不动，返回 `None`。
+    /// 译词接在西文词后面时前面补一个空格（`word_space_before`），不看自动空格开没开。
     pub fn commit_translation(&mut self, candidate: &Candidate, sense: usize) -> Option<String> {
         let text = candidate
             .translation
             .as_ref()
             .and_then(|t| t.senses().get(sense))
             .map(|s| s.text.clone())?;
-        let lead = self.auto_space_before(&text);
+        let lead = self.word_space_before(&text) || self.auto_space_before(&text);
         self.commit_with(candidate, InputSource::Translation, Some(sense));
-        let text = if lead { format!(" {text}") } else { text };
-        // 应用里收到的是译文：退格计数与自动空格的上文都按译文算
+        // 应用里收到的是译文：退格计数与自动空格的上文都按译文算；补的空格已单独记成一次直通，这里不再算进去
         if let Some(last) = self.recent_commits.last_mut() {
             last.chars = text.chars().count();
             last.tail = text.chars().last();
         }
-        Some(text)
+        let text = if lead { format!(" {text}") } else { text };
+        Some(self.take_held() + &text)
     }
 
-    /// 候选比输入短时（`kaifazhe` 选了 开发），剩余拼音留在缓冲区，壳应接着 [`Self::query`]。
+    /// 候选比输入短时（`kaifazhe` 选了 开发），剩余拼音留在缓冲区，壳应接着 [`Self::query`]；
+    /// 这时选的词先留在组句里、返回空串，整段选完时连同前面留着的一起返回（见 [`Self::take_held`]）。
     /// 候选的最后一个音节比输入长时（`kaif` 选了 开发），把输入吃完。
     /// 开了自动空格（[`Self::set_auto_space`]）时与上文、候选内部的中西文交界都补好空格。
+    /// 面板开着时上屏的是面板里的条目：记一次使用（私密输入不记），下次打开排进「常用」。
     pub fn commit(&mut self, candidate: &Candidate) -> String {
-        self.panel = None;
+        if self.panel.take().is_some() && !self.private {
+            self.panel_history.record(&candidate.text);
+        }
         let lead = self.auto_space_before(&candidate.text);
+        let before = self.hold_selections.then(|| self.composition.clone());
         let text = self.commit_with(candidate, InputSource::from(candidate.kind), None);
-        if lead { format!(" {text}") } else { text }
+        let text = if lead { format!(" {text}") } else { text };
+        self.hold_or_release(before, text)
     }
 
     /// [`Self::commit`] 的内部形式：`source` 写进输入日志（上屏译词时不是候选本身），
@@ -447,7 +454,7 @@ impl Engine {
     /// 双拼不记（键与全拼对不上）。
     pub(super) fn accepted_typos(&self, candidate: &Candidate) -> Vec<(String, String)> {
         let keys = self.composition.scope();
-        if self.decode(keys).is_some() {
+        if self.nine_key || self.decode(keys).is_some() {
             return Vec::new();
         }
         match self.active_correction(keys) {
@@ -468,6 +475,9 @@ impl Engine {
         candidate: &Candidate,
     ) -> Option<Vec<sentence::SentenceWord>> {
         let scope = self.composition.scope();
+        if self.nine_key {
+            return self.nine_key_sentence_words(candidate);
+        }
         if self.decode(scope).is_none()
             && let Some(tail) = self.split_english_tail(scope)
             && let Some(words) = self.mixed_words(scope, &tail, &candidate.text)
@@ -512,6 +522,13 @@ impl Engine {
     /// 纠错生效时按纠正后的拼音算，再按那处编辑换算回原串；双拼按解出的全拼算，再换算回键数。
     pub(super) fn consumed_by(&self, candidate: &Candidate) -> (usize, String) {
         let keys = self.composition.scope();
+        // 九宫格：按音节长度消耗，学习键用候选自己的拼音（与全拼共用）
+        if self.nine_key {
+            return (
+                self.nine_key_consumed(candidate),
+                candidate.syllables.concat(),
+            );
+        }
         if let Some(decoded) = self.decode(keys) {
             let pinyin_len = self.align(decoded.pinyin(), &candidate.syllables).consumed;
             return (
@@ -602,8 +619,9 @@ impl Engine {
     }
 
     /// `pos` 处这个音节能看到的输入段（到下一个 `'` 为止）与它的起点（跳过开头的 `'`）。
+    /// 缓冲区本身以 `'` 开头（`shan'gou` 选了 闪 剩下 `'gou`）时也要跳过，否则一个键都吃不掉。
     fn rest_at<'a>(&self, input: &'a str, pos: usize) -> (&'a str, usize) {
-        let start = if pos > 0 && input[pos..].starts_with('\'') {
+        let start = if input[pos..].starts_with('\'') {
             pos + 1
         } else {
             pos

@@ -3,14 +3,15 @@
 use bamboo_slip::taffy::NodeId;
 use bamboo_slip::{RenderError, SettingRow, Ui, group, section_title};
 use qingjian_core::{Usage, VocabularySummary};
+use qingjian_learning::figures::{
+    best_day, clean_rate, daily_average, fastest_day, first_choice_rate, keys_per_hanzi,
+};
 
 use super::{
     NONE_YET, card, cards, charts, detail, full_date, levels, note, percent, vocabulary_line,
 };
 use crate::message::Message;
-use crate::stats::{
-    InputStats, clean_rate, first_choice_rate, group_digits, hanzi_text, keys_per_hanzi, scale_line,
-};
+use crate::stats::{InputStats, group_digits, hanzi_text, scale_line};
 use crate::view::Page;
 
 pub fn input(
@@ -25,7 +26,7 @@ pub fn input(
 
     let row = [
         usage_card(ui, page, "今天", &stats.today_usage())?,
-        usage_card(ui, page, "本周", &stats.week())?,
+        usage_card(ui, page, "近 7 天", &stats.recent())?,
         usage_card(ui, page, "本月", &stats.month())?,
         usage_card(ui, page, "累计", &total)?,
     ];
@@ -81,23 +82,17 @@ fn details(
 ) -> Result<Vec<NodeId>, RenderError> {
     let theme = &page.theme;
     let (days, since) = stats.active_days();
-    let best = stats.best_day().map_or(NONE_YET.to_owned(), |(date, day)| {
+    let best = best_day(&stats.days).map_or(NONE_YET.to_owned(), |(date, day)| {
         format!("{} · {}", full_date(date), hanzi_text(day.hanzi))
     });
-    let average = if days == 0 {
-        NONE_YET.to_owned()
-    } else {
-        hanzi_text(total.hanzi / days as u64)
-    };
+    let average = daily_average(&stats.days).map_or(NONE_YET.to_owned(), hanzi_text);
     let speed = |value: Option<f64>| value.map_or(NONE_YET.to_owned(), |v| format!("{v:.0} 字/分"));
-    let fastest = stats
-        .fastest_day()
-        .map_or(NONE_YET.to_owned(), |(date, v)| {
-            format!("{} · {v:.0} 字/分", full_date(date))
-        });
+    let fastest = fastest_day(&stats.days).map_or(NONE_YET.to_owned(), |(date, v)| {
+        format!("{} · {v:.0} 字/分", full_date(date))
+    });
     let rate = |value: Option<f64>| value.map_or(NONE_YET.to_owned(), percent);
     let code = keys_per_hanzi(total).map_or(NONE_YET.to_owned(), |v| format!("{v:.1} 键/字"));
-    const SPEED: &str = "上屏的汉字除以在打字的时间（词与词之间的间隔也算，停顿超过 5 秒的那段不算）；只算从这一版起选词打出的字";
+    const SPEED: &str = "每分钟上屏的字数，停顿超过 5 秒不算";
     let mut rows = vec![
         detail(ui, page, "最多的一天", None, &best)?,
         detail(ui, page, "有输入的日子平均", None, &average)?,

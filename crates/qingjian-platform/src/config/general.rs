@@ -1,11 +1,12 @@
 use qingjian_core::{ShuangpinScheme, TraditionalVariant};
 use serde::{Deserialize, Serialize};
 
-use super::scheme::{Scheme, scheme_label};
+use super::scheme::Scheme;
 use super::{
-    Appearance, CandidateRenderer, EmojiCount, FontSize, LayoutMode, LegacyTraditional, LogLevel,
-    PreeditMode, ShiftLetter,
+    Appearance, CandidateRenderer, EmojiCount, FontSize, KeyHintMode, LayoutMode,
+    LegacyTraditional, LogLevel, NumpadDigit, PreeditMode, ShiftLetter,
 };
+use crate::code_schemes::{self, WUBI86};
 
 /// 每页最多几个候选：数字键只有 1–9。
 pub const MAX_PAGE_SIZE: usize = 9;
@@ -21,10 +22,12 @@ pub const DEFAULT_THEME: &str = "qingjian";
 /// 缺省翻页键对，与 [`PAGE_KEY_OPTIONS`] 第一项一致。
 pub const DEFAULT_PAGE_KEYS: (char, char) = ('[', ']');
 
-/// `[general]` 分节：与具体功能无关的常规项。
-/// `learning_language` 写这个值表示不显示译文。
-pub const LEARNING_LANGUAGE_OFF: &str = "off";
+/// 键位提示窗口缺省的不透明度（百分比）。
+pub const DEFAULT_KEY_HINT_OPACITY: u8 = 85;
 
+pub use qingjian_core::LEARNING_LANGUAGE_OFF;
+
+/// `[general]` 分节：与具体功能无关的常规项。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GeneralConfig {
@@ -34,6 +37,9 @@ pub struct GeneralConfig {
     /// 译词旁是否显示词性标注（v. / n. / adj. / phr. 等，`开发` → v. develop）。缺省开：关掉只留译词。
     /// 译文整体关掉（[`Self::learning_language`] 为 `off`）时此项无效果。
     pub translation_pos: bool,
+
+    /// 候选窗口顶部的拼音行按高亮候选显示带调拼音（`gān'gà`），应用里的拼音不变。缺省关。
+    pub show_tones: bool,
 
     /// 每页候选数，1–9。
     pub page_size: usize,
@@ -83,6 +89,12 @@ pub struct GeneralConfig {
     /// 中文模式下整段是英文词或英文词的开头时给英文候选与补全（`hello`、`compa` → company）。关掉中文模式只出中文，英文模式照旧。
     pub english_in_chinese: bool,
 
+    /// 中文模式下英文候选（精确词 + 补全）最多几个。缺省 4（1 条精确词 + 3 条补全），1 时只留最靠前的一条。
+    pub english_max_in_chinese: usize,
+
+    /// 有中文候选时英文最高排到第几位。缺省 1（不限制）；没有中文候选时英文照旧第一。
+    pub english_min_position: usize,
+
     /// 候选后面一次最多配几个 emoji（`kaixin` → 开心 😄），0 时候选里只有字词。
     pub emoji: EmojiCount,
 
@@ -98,11 +110,15 @@ pub struct GeneralConfig {
     /// 中文模式下按住 Shift 敲的字母：交给应用（缺省）还是收进组句缓冲区参与匹配。
     /// 收进组句才能打出「C盘」这类混杂词（`Cpan` 与 `cpan` 一样匹配）。
     pub shift_letter: ShiftLetter,
+
+    /// Windows 中文组句中小键盘数字选候选还是直接输入；主键盘数字不受影响。
+    pub numpad_digit: NumpadDigit,
+
     /// 内置英文模式：开着时单击切换键（`[shortcut] switch_mode`）或按 Caps Lock 能进英文模式。
     /// 关掉后青简保持中文模式，切换键与语言栏按钮都不再切过去；要打英文请用系统快捷键切到别的输入法。
     pub english_mode: bool,
 
-    /// Windows：首次使用时默认英文；按应用记忆时用于没有记录的应用。
+    /// 默认英文：Windows 是首次使用时，按应用记忆时用于没有记录的应用；Linux 是每个新输入上下文。
     pub default_english: bool,
 
     /// Windows：按应用 exe 名记住中英状态，仅保存在本次 Server 运行期间。
@@ -140,8 +156,24 @@ pub struct GeneralConfig {
     /// 缺省关（展开成全拼音节）；常在双拼中打英文词或需要核对按键的人可打开。
     pub shuangpin_raw_preedit: bool,
 
-    /// 形码侧方案：空串为关，`wubi86` 为五笔（86 版）。**与拼音同时开着就是混输**，见 [`Self::mixed`]。
-    pub wubi: String,
+    /// 一段拼音分几次选完时，先选的词留在输入框里、整段选完才一起上屏，退格先撤回选择。缺省开；关掉是选了就上屏。
+    pub hold_selections: bool,
+
+    /// 双拼键位提示：在候选窗旁画出当前方案的键位，敲了声母后标出能接的韵母键。见 [`KeyHintMode`]。
+    pub key_hint: KeyHintMode,
+
+    /// 键位提示窗口的不透明度（百分比，30–100），见 [`Self::key_hint_opacity`]。
+    pub key_hint_opacity: u8,
+
+    /// 键位提示键盘的大小（百分比，60–150，在候选字号的比例之上再缩放），见 [`Self::key_hint_size`]。
+    pub key_hint_size: u8,
+
+    /// 形码侧方案：`off` 为关，`wubi86` 为内置五笔，其他是用户目录 `schemes/<id>/` 下的方案（见 [`crate::code_schemes`]）。
+    /// **与拼音同时开着就是混输**，见 [`Self::mixed`]。缺省是空串：文件里没写这一项时要去看旧键，见 [`Self::code`]。
+    pub code: String,
+
+    /// 旧键（2026-10-20 之前的 `[general] wubi`，空串为关、`wubi86` 为开）：只在 [`Self::code`] 里用，不再写出去。
+    pub wubi: Option<String>,
 
     /// 旧键（2026-09-16 之前是 `[general] shuangpin`，空串为全拼）：只在 [`Self::scheme`] 里用来推断方案，
     /// 不再写出去；`scheme` 写了值就不看它。当时 `shuangpin` 与 `zhuyin` 是两个字段表达同一个维度。
@@ -161,6 +193,9 @@ pub struct GeneralConfig {
     /// `traditional_variant` 写了值就不看它。新写法换了键名，旧版本读到新配置时才不会因类型不符整个解析失败。
     pub traditional: Option<LegacyTraditional>,
 
+    /// 简繁快捷键切回繁体时用的字形，快捷键切到简体时记下切走前那一档；读法见 [`Self::last_traditional`]。
+    pub last_traditional: String,
+
     /// 日志级别，缺省 info（不含用户敲的内容）。
     pub log_level: LogLevel,
 
@@ -171,7 +206,7 @@ pub struct GeneralConfig {
     /// 学习输入习惯：按选择调整候选顺序、记新词与敲错纠正。关掉后不再记，已学的仍参与排序。
     pub learning: bool,
 
-    /// 把系统的文本替换（macOS「键盘 → 文本替换」）并进自定义短语：输入码敲全后短语占该码最靠前的空位。只有 macOS 用。
+    /// 把系统的文本替换（macOS「键盘 → 文本替换」）并进自定义短语：输入码敲全后短语排在候选前面，同权重时排在用户自己的短语之后。只有 macOS 用。
     pub system_text_replacements: bool,
 }
 
@@ -180,6 +215,7 @@ impl Default for GeneralConfig {
         Self {
             learning_language: "en".to_owned(),
             translation_pos: true,
+            show_tones: false,
             page_size: MAX_PAGE_SIZE,
             page_keys: PAGE_KEY_OPTIONS[0].to_owned(),
             appearance: Some(Appearance::default()),
@@ -195,11 +231,14 @@ impl Default for GeneralConfig {
             english_candidates: true,
             chinese_first: false,
             english_in_chinese: true,
+            english_max_in_chinese: qingjian_core::ENGLISH_CANDIDATES_MAX,
+            english_min_position: 1,
             emoji: EmojiCount::default(),
             kaomoji: EmojiCount::new(1),
             symbols: EmojiCount::new(1),
             auto_space: false,
             shift_letter: ShiftLetter::default(),
+            numpad_digit: NumpadDigit::default(),
             english_mode: true,
             default_english: false,
             remember_mode_per_app: false,
@@ -211,11 +250,17 @@ impl Default for GeneralConfig {
             aux_code_keep_empty: true,
             scheme: String::new(),
             shuangpin_raw_preedit: false,
-            wubi: String::new(),
+            hold_selections: true,
+            key_hint: KeyHintMode::default(),
+            key_hint_opacity: DEFAULT_KEY_HINT_OPACITY,
+            key_hint_size: 100,
+            code: String::new(),
+            wubi: None,
             shuangpin: None,
             zhuyin: None,
             traditional_variant: TraditionalVariant::Off.key().to_owned(),
             traditional: None,
+            last_traditional: String::new(),
             log_level: LogLevel::default(),
             input_log: true,
             learning: true,
@@ -235,6 +280,18 @@ impl GeneralConfig {
             Some(LegacyTraditional::Flag(true)) => TraditionalVariant::Taiwan,
             Some(LegacyTraditional::Key(key)) => traditional_from_key(key.trim()),
             Some(LegacyTraditional::Flag(false)) | None => TraditionalVariant::Off,
+        }
+    }
+
+    /// 简繁快捷键从简体切过去的那一档繁体：没写、写的是 `off` 或不认识时用台湾字形（与 0.2.1 的开关相同）。
+    pub fn last_traditional(&self) -> TraditionalVariant {
+        let key = self.last_traditional.trim();
+        if key.is_empty() {
+            return TraditionalVariant::Taiwan;
+        }
+        match traditional_from_key(key) {
+            TraditionalVariant::Off => TraditionalVariant::Taiwan,
+            variant => variant,
         }
     }
 
@@ -261,6 +318,7 @@ impl GeneralConfig {
         if !key.is_empty() {
             return match key.parse() {
                 Ok(scheme) => scheme,
+                Err(_) if code_schemes::is_valid_id(key) => Scheme::Custom,
                 Err(_) => {
                     tracing::warn!(key, "不认识的拼音方案，按全拼");
                     Scheme::Pinyin
@@ -302,8 +360,23 @@ impl GeneralConfig {
     }
 
     /// 当前方案是双拼时是哪一套；不是双拼时为 `None`。
+    /// 键位提示窗口的不透明度（0–1），写出范围的收到 30%–100%：太透明就看不见了。
+    pub fn key_hint_opacity(&self) -> f32 {
+        f32::from(self.key_hint_opacity.clamp(30, 100)) / 100.0
+    }
+
+    /// 键位提示键盘的缩放倍数，写出范围的收到 60%–150%。
+    pub fn key_hint_size(&self) -> f32 {
+        f32::from(self.key_hint_size.clamp(60, 150)) / 100.0
+    }
+
     pub fn shuangpin(&self) -> Option<ShuangpinScheme> {
         self.scheme().shuangpin()
+    }
+
+    /// 拼音侧选的用户双拼方案（id）；不是 [`Scheme::Custom`] 时为 `None`。这里只读配置，方案在不在由壳去找。
+    pub fn custom_shuangpin(&self) -> Option<String> {
+        (self.scheme() == Scheme::Custom).then(|| self.scheme.trim().to_owned())
     }
 
     /// 当前方案是不是大千注音。
@@ -311,29 +384,26 @@ impl GeneralConfig {
         self.scheme() == Scheme::Zhuyin
     }
 
-    /// 形码侧（五笔）开没开。`wubi` 认 `wubi86`；认不出来时警告并按关。
-    /// 旧配置把五笔写在 `scheme` 里（`wubi86`），那时等价于「拼音关 + 五笔开」，[`Self::scheme`] 会解成
-    /// [`Scheme::Off`]，这里跟着认下来，免得老配置升级后两个轴都关着、一个候选都不出。
-    pub fn wubi(&self) -> bool {
-        let key = self.wubi.trim();
-        if key.is_empty() || key == "off" || key == "none" {
-            return matches!(self.scheme.trim(), "wubi" | "wubi86");
-        }
-        if key == "wubi86" {
-            return true;
-        }
-        tracing::warn!(key, "不认识的形码方案，按关");
-        false
+    /// 形码侧选了哪套方案（id），关着为 `None`。这里只读配置，id 对应的方案在不在由壳去找。
+    ///
+    /// `code` 没写时看旧键：`wubi = "wubi86"` 是开；更早的配置把五笔写在 `scheme` 里（`wubi86`），
+    /// 那时等价于「拼音关 + 五笔开」，[`Self::scheme`] 会解成 [`Scheme::Off`]，这里跟着认下来，
+    /// 免得老配置升级后两个轴都关着、一个候选都不出。
+    pub fn code(&self) -> Option<String> {
+        let key = match self.code.trim() {
+            "" => match self.wubi.as_deref().map(str::trim) {
+                Some(key) if !key.is_empty() => key,
+                _ if matches!(self.scheme.trim(), "wubi" | "wubi86") => WUBI86,
+                _ => return None,
+            },
+            key => key,
+        };
+        (!matches!(key, "off" | "none")).then(|| key.to_owned())
     }
 
     /// 拼音与形码同时开着 = 混输：两边都出候选，编码打全的形码词在前。
     pub fn mixed(&self) -> bool {
-        self.scheme().is_on() && self.wubi()
-    }
-
-    /// 状态条上显示的输入方案名；见 [`scheme_label`]。
-    pub fn scheme_label(&self) -> String {
-        scheme_label(self.scheme(), self.wubi())
+        self.scheme().is_on() && self.code().is_some()
     }
 
     /// 辅码触发键；写得不对（不是单个合法字符，或撞上当前翻页键 / 拼音隔音符 `'`）时退回缺省 `;`。
@@ -348,6 +418,17 @@ impl GeneralConfig {
     /// 夹到合法范围的每页候选数。
     pub fn page_size(&self) -> usize {
         self.page_size.clamp(1, MAX_PAGE_SIZE)
+    }
+
+    /// 夹到 1–[`qingjian_core::ENGLISH_CANDIDATES_MAX`] 的英文候选数；写 0 或更大都收到边界。
+    pub fn english_max_in_chinese(&self) -> usize {
+        self.english_max_in_chinese
+            .clamp(1, qingjian_core::ENGLISH_CANDIDATES_MAX)
+    }
+
+    /// 夹到 1–9 的英文最高位次；1 即不限制。
+    pub fn english_min_position(&self) -> usize {
+        self.english_min_position.clamp(1, MAX_PAGE_SIZE)
     }
 
     /// 翻页键对；写得不对（不是两个不同的 ASCII 可见字符）时退回缺省。
@@ -390,6 +471,27 @@ mod tests {
         assert!(!general.horizontal_grid);
         let general: GeneralConfig = toml::from_str("horizontal_grid = true\n").unwrap();
         assert!(general.horizontal_grid);
+    }
+
+    #[test]
+    fn english_candidate_limits_are_sanitized() {
+        let mut general = GeneralConfig::default();
+        assert_eq!(
+            general.english_max_in_chinese(),
+            qingjian_core::ENGLISH_CANDIDATES_MAX
+        );
+        assert_eq!(general.english_min_position(), 1);
+        general.english_max_in_chinese = 0;
+        general.english_min_position = 0;
+        assert_eq!(general.english_max_in_chinese(), 1);
+        assert_eq!(general.english_min_position(), 1);
+        general.english_max_in_chinese = 99;
+        general.english_min_position = 99;
+        assert_eq!(
+            general.english_max_in_chinese(),
+            qingjian_core::ENGLISH_CANDIDATES_MAX
+        );
+        assert_eq!(general.english_min_position(), MAX_PAGE_SIZE);
     }
 
     #[test]
@@ -459,8 +561,14 @@ mod tests {
         general.scheme = "none".to_owned();
         assert_eq!(general.scheme(), Scheme::Off);
         assert!(!general.scheme().is_on());
-        general.scheme = "flypy".to_owned();
+        assert_eq!(general.custom_shuangpin(), None);
+        general.scheme = " my-sp ".to_owned();
+        assert_eq!(general.scheme(), Scheme::Custom);
+        assert_eq!(general.custom_shuangpin().as_deref(), Some("my-sp"));
+        assert_eq!(general.shuangpin(), None);
+        general.scheme = "Flypy!".to_owned();
         assert_eq!(general.scheme(), Scheme::Pinyin);
+        assert_eq!(general.custom_shuangpin(), None);
     }
 
     #[test]
@@ -468,24 +576,38 @@ mod tests {
         let mut general = GeneralConfig::default();
         // 缺省：全拼，不开形码
         assert_eq!(general.scheme(), Scheme::Pinyin);
-        assert!(!general.wubi());
+        assert_eq!(general.code(), None);
         assert!(!general.mixed());
 
         // 双拼 alone
         general.scheme = "xiaohe".to_owned();
         assert!(!general.mixed());
-        // 五笔 alone：拼音侧关掉
+        // 形码 alone：拼音侧关掉
         general.scheme = "none".to_owned();
-        general.wubi = "wubi86".to_owned();
-        assert!(general.wubi());
+        general.code = "huma".to_owned();
+        assert_eq!(general.code().as_deref(), Some("huma"));
         assert!(!general.mixed());
         // 组合：两边都开 = 混输
         general.scheme = "xiaohe".to_owned();
         assert!(general.mixed());
-        // 形码写得不认识：按关，且不影响拼音侧
-        general.wubi = "wubi98".to_owned();
-        assert!(!general.wubi());
+        // 关形码不影响拼音侧
+        general.code = "off".to_owned();
+        assert_eq!(general.code(), None);
         assert_eq!(general.scheme(), Scheme::Shuangpin(ShuangpinScheme::Xiaohe));
+    }
+
+    #[test]
+    fn files_written_before_the_code_key_keep_their_wubi() {
+        let parse = |text: &str| toml::from_str::<GeneralConfig>(text).unwrap().code();
+        assert_eq!(parse("wubi = \"wubi86\"\n").as_deref(), Some("wubi86"));
+        assert_eq!(parse("wubi = \"\"\n"), None);
+        assert_eq!(parse(""), None);
+        // 新键写了就以它为准，`off` 关掉也不回头看旧键
+        assert_eq!(parse("code = \"off\"\nwubi = \"wubi86\"\n"), None);
+        assert_eq!(
+            parse("code = \"huma\"\nwubi = \"wubi86\"\n").as_deref(),
+            Some("huma")
+        );
     }
 
     #[test]
@@ -497,7 +619,7 @@ mod tests {
             ..GeneralConfig::default()
         };
         assert_eq!(general.scheme(), Scheme::Off);
-        assert!(general.wubi());
+        assert_eq!(general.code().as_deref(), Some("wubi86"));
         assert!(!general.mixed());
     }
 
@@ -538,6 +660,20 @@ mod tests {
             TraditionalVariant::Off
         );
         assert_eq!(parse("traditional = \"off\""), TraditionalVariant::Off);
+        let last = |text: &str| {
+            toml::from_str::<GeneralConfig>(text)
+                .unwrap()
+                .last_traditional()
+        };
+        assert_eq!(last(""), TraditionalVariant::Taiwan);
+        assert_eq!(
+            last("last_traditional = \"off\""),
+            TraditionalVariant::Taiwan
+        );
+        assert_eq!(
+            last("last_traditional = \"hongkong\""),
+            TraditionalVariant::Hongkong
+        );
         assert_eq!(
             parse("traditional = \"hongkong\""),
             TraditionalVariant::Hongkong

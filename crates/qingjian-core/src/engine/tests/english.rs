@@ -78,6 +78,26 @@ fn usage_meter_counts_hanzi_words_and_english_words_per_commit() {
 }
 
 #[test]
+fn unmetered_commits_are_not_counted_and_do_not_leak_keys() {
+    let recorded = Arc::new(Mutex::new(Vec::new()));
+    let mut engine = engine().with_usage_meter(Box::new(MemoryMeter(recorded.clone())));
+    // 壳的工具框（快捷翻译的原文）里打的不算
+    engine.set_metered(false);
+    engine.set_input("kaifa");
+    let kaifa = engine.query().unwrap().candidates.items[0].clone();
+    engine.commit(&kaifa);
+    assert!(recorded.lock().unwrap().is_empty());
+    // 回到应用里接着打：键数只算这一段的
+    engine.set_metered(true);
+    engine.set_input("kaifa");
+    let again = engine.query().unwrap().candidates.items[0].clone();
+    engine.commit(&again);
+    let recorded = recorded.lock().unwrap();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].keys, 5);
+}
+
+#[test]
 fn english_word_yields_to_a_chinese_word_the_user_keeps_choosing() {
     let dictionary = Dictionary::parse("可以\tke yi\t9000\n客运\tke yun\t100\n").unwrap();
     let mut engine = Engine::new(dictionary)
@@ -250,6 +270,95 @@ fn english_in_chinese_off_drops_words_and_completions_but_not_english_mode() {
     engine.set_english_mode(true);
     engine.set_input("comp");
     assert_eq!(texts_of(&engine), ["company", "compare"]);
+}
+
+/// 关掉「打拼音时也给英文词」后英文词连句尾都不参与分词（#766）：
+/// `nanine` 不再切成 `na` + `nine`，`nine` 也不再读成英文词。
+#[test]
+fn english_in_chinese_off_stops_the_english_tail() {
+    const DICT: &str = "那\tna\t300000\n你\tni\t400000\n呢\tne\t200000\n那你呢\tna ni ne\t500000\n";
+    let build = || {
+        let words = WordList::parse("nine\tnine\t4500\nrust\trust\t3740\n").unwrap();
+        Engine::new(Dictionary::parse(DICT).unwrap()).with_english(words)
+    };
+
+    // 开着时与 issue 的复现一致：整句把 nine 当英文尾段
+    let mut on = build();
+    on.set_input("nanine");
+    assert_eq!(texts_of(&on)[0], "那nine");
+
+    let mut off = build();
+    off.set_english_in_chinese(false);
+    off.set_input("nanine");
+    let all = texts_of(&off);
+    assert_eq!(all[0], "那你呢");
+    assert!(!all.iter().any(|text| text.contains("nine")), "{all:?}");
+    // 单独打 nine 也回到拼音读法
+    off.set_input("nine");
+    let all = texts_of(&off);
+    assert!(
+        !all.iter().any(|text| text.eq_ignore_ascii_case("nine")),
+        "{all:?}"
+    );
+}
+
+#[test]
+fn english_candidate_count_stops_at_the_configured_limit() {
+    let words =
+        WordList::parse("company\tcompany\t5600\ncompare\tcompare\t4450\ncompass\tcompass\t3000\n")
+            .unwrap();
+    let mut engine = engine().with_english(words);
+    engine.set_input("compa");
+    // 缺省 4：一条精确词都没有时补全仍按老样子最多 3 条
+    assert_eq!(texts_of(&engine)[..3], ["company", "compare", "compass"]);
+    engine.set_english_max_in_chinese(2);
+    let all = texts_of(&engine);
+    assert_eq!(
+        all.iter()
+            .filter(|text| ["company", "compare", "compass"].contains(&text.as_str()))
+            .count(),
+        2
+    );
+    // 1 只留最靠前的一条；0 越界收到 1
+    engine.set_english_max_in_chinese(0);
+    let all = texts_of(&engine);
+    assert_eq!(
+        all.iter()
+            .filter(|text| ["company", "compare", "compass"].contains(&text.as_str()))
+            .count(),
+        1
+    );
+    // 整段就是精确词时，1 也只留它
+    engine.set_input("company");
+    engine.set_english_max_in_chinese(1);
+    assert_eq!(
+        texts_of(&engine)
+            .iter()
+            .filter(|text| ["company", "compare", "compass"].contains(&text.as_str()))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn english_min_position_keeps_chinese_candidates_above() {
+    const DICT: &str = "吃\tchi\t5000\n拿\tna\t5000\n吃拿\tchi na\t6000\n";
+    let words = WordList::parse("china\tchina\t5000\nGitHub\tgithub\t3000\n").unwrap();
+    let mut engine = Engine::new(Dictionary::parse(DICT).unwrap()).with_english(words);
+    engine.set_input("china");
+    // 缺省不限制：英文词跟在第一个中文候选后面
+    let all = texts_of(&engine);
+    let english = all.iter().position(|text| text == "china").unwrap();
+    assert!(english < 2, "{all:?}");
+    // 中文候选够多时，英文最高排到第 3 位
+    engine.set_english_min_position(3);
+    let all = texts_of(&engine);
+    assert_eq!(all[2], "china", "{all:?}");
+    assert!(all[..2].iter().all(|text| text != "china"));
+    // 没有中文候选时仍排第一
+    engine.set_english_min_position(9);
+    engine.set_input("github");
+    assert_eq!(texts_of(&engine)[0], "GitHub");
 }
 
 #[test]

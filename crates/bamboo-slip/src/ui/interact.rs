@@ -9,6 +9,9 @@ type KeyHandler<M> = Box<dyn Fn(&KeyPress) -> Option<M>>;
 
 type TextHandler<M> = Box<dyn Fn(&TextInput) -> Option<M>>;
 
+/// 拖动：指针在元素里的横向位置（0 为左边、1 为右边，出界夹到两头）。
+type DragHandler<M> = Box<dyn Fn(f32) -> Option<M>>;
+
 /// 什么都不设也有用：元素会记悬停状态。
 pub struct Interact<M> {
     pub(super) click: Option<M>,
@@ -17,12 +20,17 @@ pub struct Interact<M> {
 
     pub(super) text: Option<TextHandler<M>>,
 
+    pub(super) drag: Option<DragHandler<M>>,
+
     /// 焦点离开它时的消息。
     pub(super) blur: Option<M>,
 
     pub(super) focusable: bool,
 
     pub(super) disabled: bool,
+
+    /// 秘密输入（API 密钥这类）：聚焦时宿主关掉输入法，键按原始键走，不让输入法组字并上报。
+    pub(super) secret: bool,
 
     /// 滚动区：被滚动的内容节点（元素自己是视口）。
     pub(super) scroll_content: Option<NodeId>,
@@ -40,9 +48,11 @@ impl<M> Interact<M> {
             click: None,
             key: None,
             text: None,
+            drag: None,
             blur: None,
             focusable: false,
             disabled: false,
+            secret: false,
             scroll_content: None,
         }
     }
@@ -72,6 +82,14 @@ impl<M> Interact<M> {
         }
     }
 
+    /// 按下与按住拖动（滑块）：按下时捕获指针，之后每次移动都交给它，移出元素也算，抬起为止。
+    pub fn on_drag(self, handler: impl Fn(f32) -> Option<M> + 'static) -> Self {
+        Self {
+            drag: Some(Box::new(handler)),
+            ..self
+        }
+    }
+
     /// 焦点离开它（点了别处、Tab 走了）时的消息；元素从树里消失时不发。
     pub fn on_blur(self, message: M) -> Self {
         Self {
@@ -93,6 +111,12 @@ impl<M> Interact<M> {
         Self { disabled, ..self }
     }
 
+    /// 秘密输入：聚焦时宿主关掉输入法（见 [`super::interaction::Interaction::ime_allowed`]），
+    /// 打的键以原始键形式交给字段，贴秘密内容请用粘贴。跟着 [`Self::on_text`] 一起设。
+    pub fn secret(self, secret: bool) -> Self {
+        Self { secret, ..self }
+    }
+
     /// 元素是滚动区的视口，`content` 是里面被滚动的内容：滚轮在它上面时滚它，滚动位置按元素的 key 记。
     pub fn scrolls(self, content: NodeId) -> Self {
         Self {
@@ -104,6 +128,10 @@ impl<M> Interact<M> {
     /// 能接点击：有点击消息且没禁用。
     pub(super) fn clickable(&self) -> bool {
         self.click.is_some() && !self.disabled
+    }
+
+    pub(super) fn draggable(&self) -> bool {
+        self.drag.is_some() && !self.disabled
     }
 
     pub(super) fn takes_focus(&self) -> bool {

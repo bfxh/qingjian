@@ -13,6 +13,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use qingjian_core::{Language, NoTranslator};
 use qingjian_platform::Config;
+use qingjian_predict::API_USAGE_FILE;
 
 pub(crate) use self::state::ConfigReload;
 use super::{Router, RouterConfig};
@@ -87,11 +88,21 @@ impl Router {
         self.engine.set_shuangpin(config.general.shuangpin());
         self.engine
             .set_shuangpin_raw_preedit(config.general.shuangpin_raw_preedit);
+        self.engine
+            .set_hold_selections(config.general.hold_selections);
+        self.engine
+            .set_context_memory(config.model.context_memory_seconds);
         self.engine.set_zhuyin_mode(config.general.is_zhuyin());
         self.engine
             .set_shift_letter_compose(config.general.shift_letter.compose());
         self.engine.set_learning(config.general.learning);
         self.engine.set_chinese_first(config.general.chinese_first);
+        self.engine
+            .set_english_in_chinese(config.general.english_in_chinese);
+        self.engine
+            .set_english_max_in_chinese(config.general.english_max_in_chinese());
+        self.engine
+            .set_english_min_position(config.general.english_min_position());
         self.engine
             .set_emoji_limit(usize::from(config.general.emoji.get()));
         self.engine
@@ -108,12 +119,18 @@ impl Router {
         }
         self.config = RouterConfig::from(config);
         self.config.page_size = self.config.page_size.clamp(1, 9);
+        if !self.config.english_mode {
+            for info in self.sessions.values_mut() {
+                info.english = false;
+            }
+        }
 
         let Some(mut reload) = self.reload.take() else {
             return;
         };
         if config.predict != reload.applied_predict {
-            self.reload_cloud(&config.predict);
+            let usage_path = Some(reload.user_dir.join(API_USAGE_FILE));
+            self.reload_cloud(&config.predict, usage_path);
             reload.applied_predict = config.predict.clone();
         }
         if !self.engine.prediction_enabled() {

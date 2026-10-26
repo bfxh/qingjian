@@ -1,4 +1,4 @@
-//! 「词库」页：随包领域词库（两列勾选），导入的词库（开关、移除、导入）。基础词库一直启用，不列。
+//! 「词库」页：随包领域词库（两列勾选），导入的拼音与五笔词库（开关、移除、导入）。基础词库一直启用，不列。
 
 use bamboo_slip::taffy::NodeId;
 use bamboo_slip::{RenderError, Ui, group, paragraph, section_title};
@@ -23,16 +23,26 @@ pub fn dictionaries(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Re
     out.push(group(ui, theme, &[domains])?);
 
     let mut rows = Vec::new();
-    for entry in &library.dictionaries {
-        let toggle = toggle_disabled(Kind::Dictionary, &config.disabled, &entry.stem);
+    let imported = library
+        .dictionaries
+        .iter()
+        .map(|entry| (Kind::Dictionary, entry))
+        .chain(
+            library
+                .code_words
+                .iter()
+                .map(|entry| (Kind::CodeWords, entry)),
+        );
+    for (kind, entry) in imported {
+        let toggle = toggle_disabled(kind, &config.disabled, &entry.stem);
         rows.push(entry_row(
             ui,
             page,
-            Kind::Dictionary,
+            kind,
             entry,
-            config.is_enabled(&entry.stem),
-            toggle,
+            Some((config.is_enabled(&entry.stem), toggle)),
             true,
+            None,
         )?);
     }
     rows.push(import_row(
@@ -40,7 +50,7 @@ pub fn dictionaries(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Re
         page,
         Kind::Dictionary,
         "导入词库",
-        "接受青简 TSV（词、拼音、词频三列）、Rime 的 .dict.yaml 和 .qj，可以一次选好几个；移除只是挪到 removed 目录，不真删",
+        "支持 TSV、Rime .dict.yaml、只有词的表和 .qj，可以多选；只有词的读音按随包词库补",
     )?);
     out.push(section_title(ui, theme, "导入的词库")?);
     out.push(group(ui, theme, &rows)?);

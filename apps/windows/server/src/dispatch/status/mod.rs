@@ -7,8 +7,9 @@ mod event;
 mod sink;
 mod view;
 
+use qingjian_core::TraditionalVariant;
 use qingjian_platform::protocol::{IndicatorCommand, SessionId};
-use qingjian_platform::{Config, Scheme, scheme_label};
+use qingjian_platform::{Config, Scheme};
 
 pub use self::event::StatusEvent;
 pub use self::sink::{NoopStatusSink, StatusSink};
@@ -99,6 +100,23 @@ impl Router {
         }
     }
 
+    /// 快捷键在简体与上次用的繁体之间切换输出字形，沿用 Core 转换并保留当前组句。
+    /// 切到简体时把切走前那一档记进 `last_traditional`，下次切回去还是它。
+    pub(super) fn toggle_traditional(&mut self) {
+        let current = self.engine.traditional();
+        let next = if current == TraditionalVariant::Off {
+            self.config.last_traditional
+        } else {
+            self.config.last_traditional = current;
+            self.persist("general", "last_traditional", current.key());
+            TraditionalVariant::Off
+        };
+        self.config.traditional = next != TraditionalVariant::Off;
+        self.engine.set_traditional(next);
+        self.persist("general", "traditional_variant", next.key());
+        tracing::debug!(traditional = next.key(), "切换简繁输出");
+    }
+
     /// 写回配置文件一个键；没有配置路径（测试）就只改内存。
     fn persist(&self, section: &str, key: &str, value: impl Into<toml_edit::Value>) {
         let Some(path) = self.config_path() else {
@@ -125,12 +143,12 @@ impl Router {
                 self.status.show_status(StatusView {
                     english,
                     zhuyin: self.config.scheme == Scheme::Zhuyin,
-                    // 现算，不存下来：存了会与 scheme / wubi 冗余、手搓配置的地方就漂移
-                    scheme: Some(scheme_label(self.config.scheme, self.config.wubi))
+                    scheme: Some(self.scheme_slot.scheme_label(self.config.scheme))
                         .filter(|label| !label.is_empty()),
                     full_width: self.full_width_for(english),
                     appearance: self.config.appearance,
                     anchor: self.config.status_pos,
+                    size: self.config.status_size,
                     mode: self.input_mode(),
                 });
             }

@@ -2,7 +2,7 @@ use qingjian_core::TraditionalVariant;
 use qingjian_platform::protocol::KeyModifiers;
 use qingjian_platform::{
     Appearance, AppsConfig, CandidateRenderer, Config, FontSize, HighlightKeys, KeyCombo,
-    LayoutMode, PageKeys, PreeditMode, Scheme, SwitchKeys,
+    KeyHintMode, LayoutMode, NumpadDigit, PageKeys, PreeditMode, Scheme, SwitchKeys,
 };
 
 use super::RenderSettings;
@@ -25,6 +25,9 @@ pub struct RouterConfig {
     /// 中文模式下 Shift+字母收进组句缓冲区（`[general] shift_letter = "compose"`）。
     /// 关着（缺省）时壳把大写字母交给应用，与以前一致。
     pub shift_letter_compose: bool,
+
+    /// 中文组句中小键盘数字的用途（`[general] numpad_digit`）。
+    pub numpad_digit: NumpadDigit,
 
     /// 候选排布（`[general] layout`）。
     pub layout: LayoutMode,
@@ -94,7 +97,7 @@ pub struct RouterConfig {
     /// 关掉恢复老行为：标点进英文直输段。缺省开。
     pub punct_commits: bool,
 
-    /// 大千注音（[general] zhuyin）。
+    /// 大千注音（`[general]` zhuyin）。
     pub zhuyin: bool,
 
     /// 按应用的设置（`[apps]`），按宿主 exe 名认。
@@ -103,14 +106,14 @@ pub struct RouterConfig {
     /// 上屏第一 / 第二个译词的修饰键（`[shortcut] translation` / `translation_second`）。
     pub translation_keys: (KeyModifiers, KeyModifiers),
 
-    /// 删候选的修饰键（`[shortcut] delete_candidate`）。
-    pub delete_keys: KeyModifiers,
-
     /// 「翻译选中文字」快捷键（`[shortcut] translate_selection`）。
     pub translate_selection: KeyCombo,
 
     /// 组句中按需调用 AI 的快捷键（`[shortcut] predict`）。
     pub predict: KeyCombo,
+
+    /// 简繁切换快捷键；与选区翻译相同时不登记，保留翻译行为。
+    pub toggle_traditional: Option<KeyCombo>,
 
     /// 悬浮状态条开关（`[status_bar] enabled`）。
     pub status_enabled: bool,
@@ -118,14 +121,17 @@ pub struct RouterConfig {
     /// 状态条记住的位置（`[status_bar] x` / `y`，内容左上角物理像素）。
     pub status_pos: Option<(i32, i32)>,
 
+    /// 状态条大小（`[status_bar] size`，百分比，已收到 60–150）。
+    pub status_size: u8,
+
     /// 拼音侧方案（`[general] scheme`）。
     pub scheme: Scheme,
 
-    /// 形码侧开没开（`[general] wubi`）。与拼音同时开着就是混输。
-    pub wubi: bool,
-
     /// 繁体输出（`[general] traditional_variant`），给候选窗口主题显示简 / 繁。
     pub traditional: bool,
+
+    /// 简繁快捷键从简体切回去的那一档（`[general] last_traditional`）。
+    pub last_traditional: TraditionalVariant,
 
     /// 辅码触发键（`[general] aux_code_key`，缺省 `;`）；非法值退回缺省。
     pub aux_code_key: char,
@@ -135,6 +141,12 @@ pub struct RouterConfig {
 
     /// 译词旁是否显示词性标注（`[general] translation_pos`）。随帧下发给候选窗。
     pub translation_pos: bool,
+
+    /// 键位提示（`[general] key_hint`）。
+    pub key_hint: KeyHintMode,
+
+    /// 键位提示窗口的不透明度与键盘大小，百分比（`[general] key_hint_opacity` / `key_hint_size`，已夹到范围内）。
+    pub key_hint_look: (u8, u8),
 }
 
 impl RouterConfig {
@@ -146,6 +158,11 @@ impl RouterConfig {
     /// 横排矩阵这套按键是否生效：开关开着（`[general] horizontal_grid`）而且排布是横排。
     pub fn grid_keys(&self) -> bool {
         self.horizontal_grid && self.layout == LayoutMode::Horizontal
+    }
+
+    /// 方向键分拼音行与候选两区（Core 的 `arrows::route`）：横排，而且高亮移动键选了 `←` / `→`。
+    pub fn two_area_arrows(&self) -> bool {
+        self.layout == LayoutMode::Horizontal && self.highlight_keys == HighlightKeys::LeftRight
     }
 
     /// 交给 UI 线程的画法。
@@ -169,6 +186,7 @@ impl From<&Config> for RouterConfig {
             cloud_enabled: config.predict.enabled,
             sentence_translation: config.predict.sentence_translation,
             shift_letter_compose: config.general.shift_letter.compose(),
+            numpad_digit: config.general.numpad_digit,
             layout: config.general.layout,
             horizontal_grid: config.general.horizontal_grid,
             appearance: config.general.appearance(),
@@ -200,17 +218,26 @@ impl From<&Config> for RouterConfig {
                 let (first, second) = config.shortcut.translation_keys();
                 (first.into(), second.into())
             },
-            delete_keys: config.shortcut.delete_keys().into(),
             translate_selection: config.shortcut.translate_selection,
             predict: config.shortcut.predict,
+            toggle_traditional: config
+                .shortcut
+                .toggle_traditional
+                .filter(|key| *key != config.shortcut.translate_selection),
             status_enabled: config.status_bar.enabled,
             status_pos: config.status_bar.x.zip(config.status_bar.y),
+            status_size: config.status_bar.size.clamp(60, 150),
             scheme: config.general.scheme(),
-            wubi: config.general.wubi(),
             traditional: config.general.traditional() != TraditionalVariant::Off,
+            last_traditional: config.general.last_traditional(),
             aux_code_key: config.general.aux_code_key(),
             aux_code_show: config.general.aux_code_show,
             translation_pos: config.general.translation_pos,
+            key_hint: config.general.key_hint,
+            key_hint_look: (
+                config.general.key_hint_opacity.clamp(30, 100),
+                config.general.key_hint_size.clamp(60, 150),
+            ),
         }
     }
 }

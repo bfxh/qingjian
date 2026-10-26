@@ -193,7 +193,7 @@ fn commit_consumes_only_the_candidate_syllables() {
         .find(|c| c.text == "开发")
         .unwrap()
         .clone();
-    assert_eq!(engine.commit(&kaifa), "开发");
+    assert_eq!(engine.commit(&kaifa), "");
     assert_eq!(engine.composition().text(), "zhe");
 
     engine.set_input("kaif");
@@ -303,6 +303,24 @@ fn shortcuts_follow_the_first_local_candidate() {
     assert!(weekday.text.starts_with("星期"));
     engine.commit(&weekday);
     assert!(engine.composition().is_empty());
+}
+
+#[test]
+fn full_pinyin_keyword_brings_its_shortcuts() {
+    let mut engine = Engine::new(Dictionary::parse(KEYWORDS).unwrap());
+    engine.set_input("shijian");
+    let all: Vec<String> = engine
+        .query()
+        .unwrap()
+        .candidates
+        .items
+        .into_iter()
+        .map(|c| c.text)
+        .collect();
+    assert_eq!(all[0], "时间");
+    assert!(all[1].contains(':'), "时间之后紧跟现在的时间：{all:?}");
+    // 一组写法只出一遍
+    assert_eq!(all.iter().filter(|t| t.contains(':')).count(), 2);
 }
 
 #[test]
@@ -498,4 +516,24 @@ fn option_arrows_move_the_cursor_by_syllable() {
     engine.move_cursor_home();
     assert!(engine.move_cursor_syllable_right());
     assert_eq!(engine.composition().cursor(), "hello".len());
+}
+
+#[test]
+fn committing_the_rest_after_a_separator_split_consumes_it() {
+    // `shan'gou` 先选 闪，剩下 `'gou`；再选 购 要把它吃完，不能一直留着让空格反复上屏 购（#669）
+    let dictionary = "闪\tshan\t9000\n山沟\tshan gou\t8000\n购\tgou\t9000\n";
+    let mut engine = Engine::new(Dictionary::parse(dictionary).unwrap());
+    engine.set_input("shan'gou");
+    for (text, committed) in [("闪", ""), ("购", "闪购")] {
+        let candidate = engine
+            .query()
+            .unwrap()
+            .candidates
+            .items
+            .into_iter()
+            .find(|c| c.text == text)
+            .unwrap();
+        assert_eq!(engine.commit(&candidate), committed);
+    }
+    assert!(engine.composition().is_empty());
 }

@@ -18,6 +18,7 @@ mod conversion;
 mod interpolation;
 mod language_model;
 mod personal;
+mod pieces;
 mod scorer;
 mod sentence_word;
 mod span;
@@ -30,6 +31,7 @@ pub use conversion::Conversion;
 pub use interpolation::Interpolation;
 pub use language_model::{LanguageModel, NoLanguageModel};
 pub use personal::Personal;
+pub use pieces::text_pieces;
 pub use scorer::SentenceScorer;
 pub use sentence_word::SentenceWord;
 pub use span::{MAX_SPAN_CACHE_ENTRIES, SpanCache, SpanWord};
@@ -110,12 +112,28 @@ impl Default for SearchLimits {
     }
 }
 
+/// 注音声调代价（[`crate::zhuyin::tone::cost`]）每一点扣的分：次要读音 / 表里没有的字词频减半，
+/// 对不上声调的（代价 16）扣到几乎不进路径；格子选词也按它打折，ㄕ 一声的 师 才挤得进 是 时 事 前面。
+pub const TONE_PENALTY: f64 = std::f64::consts::LN_2;
+
 /// 语言模型不认识、只能按词库词频兜底的词扣多少分：模型见过的词更可信。
 pub const FALLBACK_PENALTY: f64 = -4.0;
 
-/// 模型不认识的词的兜底 log 概率：词库词频占总词频的比例再扣 [`FALLBACK_PENALTY`]。`log_total` 是总词频的对数。
-pub fn fallback_log_prob(frequency: u32, log_total: f64) -> f64 {
-    (f64::from(frequency) + 1.0).ln() - log_total + FALLBACK_PENALTY
+/// 补充词库（通用大词库）的词兜底时再扣多少：一百多万条里有不少语料片段（们最想 / 咋嫩），
+/// 不多扣的话它们会顶掉常用词的敲错纠正（`zanen` 出 咋嫩 而不是 咱们）。
+pub const SECONDARY_PENALTY: f64 = -2.0;
+
+/// 读音少见的代价 `-ln(读音占比)`（[`qingjian_dictionary::Match::reading_share`]），整句词图与词级排序共用：
+/// 语言模型按字形计数，不扣的话 `ditu` 会拼出 的图、`ou` 首选 区。
+pub fn reading_cost(hit: &qingjian_dictionary::Match<'_>) -> f64 {
+    -hit.reading_share().ln()
+}
+
+/// 模型不认识的词的兜底 log 概率：词库词频占总词频的比例再扣 [`FALLBACK_PENALTY`]，补充词库的再扣 [`SECONDARY_PENALTY`]。
+/// `log_total` 是总词频的对数。
+pub fn fallback_log_prob(frequency: u32, secondary: bool, log_total: f64) -> f64 {
+    let extra = if secondary { SECONDARY_PENALTY } else { 0.0 };
+    (f64::from(frequency) + 1.0).ln() - log_total + FALLBACK_PENALTY + extra
 }
 
 /// `log P(word | context)`：先问静态模型（只看前一个词，不认识就用 `fallback`），再与个人 n-gram（看前两个词）插值。

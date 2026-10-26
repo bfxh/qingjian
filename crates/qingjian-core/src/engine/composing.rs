@@ -73,7 +73,13 @@ impl Engine {
 
     /// 壳告知正在输入的应用（macOS bundle identifier / Windows exe 名），写进输入日志；不知道就给 `None`。
     pub fn set_application(&mut self, app: Option<String>) {
+        self.history.set_application(app.as_deref());
         self.application = app;
+    }
+
+    /// 焦点进了一个输入框（壳在 IMK `activateServer`、Fcitx focus in 时调）：之前在这个应用里打的字不再当前文。
+    pub fn enter_input_box(&mut self) {
+        self.history.forget_current();
     }
 
     pub fn application(&self) -> Option<&str> {
@@ -98,29 +104,31 @@ impl Engine {
     }
 
     /// 键盘方案的键，输入日志用。全拼为空串（老日志里没有这个字段就是全拼），双拼是 `xiaohe` 这类，
-    /// 注音是 `zhuyin`，只用形码是 `wubi`，**混输是 `<拼音侧>+wubi`**（`pinyin+wubi` / `xiaohe+wubi`）。
+    /// 注音是 `zhuyin`，只用形码是形码方案的键（86 五笔是 `wubi`），
+    /// **混输是 `<拼音侧>+<形码>`**（`pinyin+wubi` / `xiaohe+wubi`）。
     ///
     /// 日志里必须能分辨这几种：形码那些行的「拼音」列其实是编码，回放要照着它装配引擎，
-    /// 混输的行两边都要装配。`wubi` 单独出现是「只用形码」，不是「全拼 + 五笔」。
+    /// 混输的行两边都要装配。形码键单独出现是「只用形码」，不是「全拼 + 形码」。
     pub(super) fn scheme_key(&self) -> String {
         let phonetic = if self.zhuyin {
             "zhuyin".to_owned()
         } else {
             self.shuangpin
-                .map_or_else(String::new, |s| s.key().to_owned())
+                .as_deref()
+                .map_or_else(String::new, |layout| layout.key().to_owned())
         };
-        if self.code.is_none() {
+        let Some(code) = &self.code else {
             return phonetic;
-        }
+        };
         if !self.phonetic {
-            return "wubi".to_owned();
+            return code.key.clone();
         }
         let base = if phonetic.is_empty() {
             "pinyin"
         } else {
             &phonetic
         };
-        format!("{base}+wubi")
+        format!("{base}+{}", code.key)
     }
 
     /// 组句里要删东西了：第一次删之前把缓冲区留个快照，上屏时对比最终键串，不同就是一次重打（`retype`）。
@@ -132,7 +140,7 @@ impl Engine {
     }
 
     /// 壳告知：不在组句时按了退格，删的是应用里刚上屏的文字。从最近一次上屏往前数，一次上屏的字删光了就是「可能选错了」的信号：
-    /// 接着重打那段拼音选了别的词，那次记的学习就退回去（见 [`Self::apply_retraction`]）。
+    /// 接着重打那段拼音选了别的词，那次记的学习就退回去（见 `apply_retraction`）。
     /// 删得比记着的几次上屏加起来还多说明在改别处，全忘掉。
     pub fn note_backspace(&mut self) {
         let Some(commit) = self
@@ -196,6 +204,7 @@ impl Engine {
     /// 退格。辅码态里删的是码段：删掉最后一个码字母；删空时按「码删空后留在辅码态」开关分岔——
     /// 开（缺省）停在辅码态（`;` 仍在、无码词也回来），关则回拼音态。码段本来就空（刚触发，或删空停住）
     /// 时按退格 = 退出辅码态、拼音一个字符都不动。每次退格候选都当场重筛。
+    /// 前面有选好还没上屏的词时，退格先撤回最后一次选择（那段拼音接回来），都撤完了才删字母。
     pub fn backspace(&mut self) -> bool {
         if let Some(code) = self.aux_code.take() {
             if code.len() > 1 {
@@ -205,12 +214,16 @@ impl Engine {
             }
             return true;
         }
+        if self.undo_selection() {
+            return true;
+        }
         self.note_edit();
         self.composition.backspace()
     }
 
     pub fn clear(&mut self) {
         self.composition.clear();
+        self.held.clear();
         self.panel = None;
         self.aux_code = None;
         self.chain.leave_buffer();
@@ -298,7 +311,7 @@ impl Engine {
         is_raw(
             self.composition.text(),
             self.modes(),
-            self.shuangpin,
+            self.shuangpin.as_deref(),
             self.zhuyin,
         )
     }
@@ -341,6 +354,7 @@ impl Engine {
     /// 用一段完整拼音替换当前缓冲区，供 CLI 和测试一次性喂入。
     pub fn set_input(&mut self, input: &str) {
         self.composition.clear();
+        self.held.clear();
         for c in input.chars() {
             self.push(c);
         }
@@ -358,11 +372,12 @@ impl Engine {
             *self.correction_cache.borrow_mut() = None;
         }
         let raw = self.raw_preedit().text;
+        let held = self.take_held();
         if raw.is_empty() {
             // 壳在回车 / 失焦时不管有没有在组句都会来一趟：空的不记日志、不计统计
             self.clear();
             self.chain.reset();
-            return raw;
+            return held;
         }
         self.log_commit(&raw, &raw, InputSource::Raw);
         // 原样上屏的是个英文词（`gist`）：记进个人英文词表，下次直接出候选。
@@ -384,7 +399,11 @@ impl Engine {
         self.punctuation.note_committed(&raw);
         self.note_text(&raw);
         self.chain.reset();
-        if lead { format!(" {raw}") } else { raw }
+        if lead {
+            format!("{held} {raw}")
+        } else {
+            held + &raw
+        }
     }
 }
 

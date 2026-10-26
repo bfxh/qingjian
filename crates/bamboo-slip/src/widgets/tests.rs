@@ -186,6 +186,55 @@ fn field_frame(interaction: &mut Interaction<Field>, text: &mut TextPainter, edi
     interaction.attach(&scene, root, elements).unwrap();
 }
 
+/// 秘密输入框聚焦时关输入法，普通输入框开着。
+#[test]
+fn secret_field_disallows_ime() {
+    let mut interaction = Interaction::new();
+    let mut text = TextPainter::new(FontLibrary::system("en").unwrap());
+    let edit = TextEdit::new("");
+    let theme = WidgetTheme::new(WidgetColors::LIGHT, 1.0);
+    let mut ui = Ui::new(&interaction);
+    let plain = TextField::new(&edit)
+        .build(&mut ui, &theme, "plain", Field::Edit, None, None)
+        .unwrap();
+    let secret = TextField::new(&edit)
+        .secret(true)
+        .build(&mut ui, &theme, "secret", Field::Edit, None, None)
+        .unwrap();
+    let root = ui
+        .scene()
+        .node(
+            Style {
+                flex_direction: FlexDirection::Row,
+                ..Style::default()
+            },
+            Visual::Group,
+            &[plain, secret],
+        )
+        .unwrap();
+    let (mut scene, elements) = ui.finish();
+    layout(&mut scene, root, &mut text);
+    interaction.attach(&scene, root, elements).unwrap();
+
+    let (x, y, width, height) = interaction.rect(Key::ROOT.child("plain")).unwrap();
+    interaction.handle(&Event::PointerMoved {
+        x: x + width / 2.0,
+        y: y + height / 2.0,
+    });
+    interaction.handle(&Event::PointerDown);
+    interaction.handle(&Event::PointerUp);
+    assert!(interaction.ime_allowed(), "普通输入框开着输入法");
+
+    let (x, y, width, height) = interaction.rect(Key::ROOT.child("secret")).unwrap();
+    interaction.handle(&Event::PointerMoved {
+        x: x + width / 2.0,
+        y: y + height / 2.0,
+    });
+    interaction.handle(&Event::PointerDown);
+    interaction.handle(&Event::PointerUp);
+    assert!(!interaction.ime_allowed(), "秘密输入框聚焦时宿主关输入法");
+}
+
 #[test]
 fn text_goes_to_the_focused_field_and_leaving_commits() {
     let mut interaction = Interaction::new();
@@ -346,4 +395,95 @@ fn info_marks_with_a_link_send_it_when_clicked() {
         [Message::Toggle]
     );
     assert!(click(&mut interaction, Key::ROOT.child(("info", "没链接"))).is_empty());
+}
+
+#[test]
+fn a_long_select_value_stays_inside_its_box() {
+    let mut text = TextPainter::new(FontLibrary::system("en").unwrap());
+    let theme = WidgetTheme::new(WidgetColors::LIGHT, 1.0);
+    let interaction = Interaction::<Message>::new();
+    let mut ui = Ui::new(&interaction);
+    let long = "一个名字特别特别特别长的方案".repeat(3);
+    let select = Select::new(&long)
+        .width(160.0)
+        .max_width(240.0)
+        .build(&mut ui, &theme, "select", Message::Toggle)
+        .unwrap();
+    let short = Select::new("关")
+        .width(160.0)
+        .max_width(240.0)
+        .build(&mut ui, &theme, "short", Message::Toggle)
+        .unwrap();
+    let root = ui
+        .scene()
+        .node(
+            Style {
+                flex_direction: FlexDirection::Column,
+                align_items: Some(taffy::AlignItems::FLEX_START),
+                ..Style::default()
+            },
+            Visual::Group,
+            &[select, short],
+        )
+        .unwrap();
+    let (mut scene, _) = ui.finish();
+    layout(&mut scene, root, &mut text);
+    let (_, _, width, _) = scene.rect_in(select, root).unwrap();
+    assert!((width - 240.0).abs() < 0.5, "{width}");
+    let (_, _, width, _) = scene.rect_in(short, root).unwrap();
+    assert!((width - 160.0).abs() < 0.5, "{width}");
+}
+
+#[test]
+fn fitting_text_cuts_it_and_adds_an_ellipsis() {
+    let mut text = TextPainter::new(FontLibrary::system("en").unwrap());
+    let theme = WidgetTheme::new(WidgetColors::LIGHT, 1.0);
+    let style = theme.text(13.0, 400, theme.colors.text);
+    let whole = "五笔测试（不自动上屏）";
+    let width = text.measure(whole, &style).width;
+    assert_eq!(text.fit(whole, &style, width), whole);
+    let fitted = text.fit(whole, &style, width / 2.0);
+    assert!(
+        fitted.ends_with('…') && fitted.len() < whole.len(),
+        "{fitted}"
+    );
+    assert!(text.measure(&fitted, &style).width <= width / 2.0 + 0.5);
+    assert_eq!(text.fit(whole, &style, 1.0), "…");
+}
+
+#[test]
+fn menu_ignores_clicks_on_disabled_items() {
+    let mut text = TextPainter::new(FontLibrary::system("en").unwrap());
+    let mut interaction = Interaction::new();
+    let theme = WidgetTheme::new(WidgetColors::LIGHT, 1.0);
+    let mut ui = Ui::new(&interaction);
+    let menu = Menu::new(
+        &["one", "two", "three"],
+        Some(0),
+        (0.0, 0.0, 100.0, 20.0),
+        (400.0, 400.0),
+    )
+    .disabled(&[1])
+    .build(&mut ui, &theme, "menu", Message::Pick, Message::Up)
+    .unwrap();
+    let root = ui
+        .scene()
+        .node(
+            Style {
+                size: taffy::Size {
+                    width: taffy::Dimension::length(400.0),
+                    height: taffy::Dimension::length(400.0),
+                },
+                ..Style::default()
+            },
+            Visual::Group,
+            &[menu],
+        )
+        .unwrap();
+    let (mut scene, elements) = ui.finish();
+    layout(&mut scene, root, &mut text);
+    interaction.attach(&scene, root, elements).unwrap();
+    let item = |index: usize| Key::ROOT.child("menu").child(index);
+    assert!(click(&mut interaction, item(1)).is_empty());
+    assert_eq!(click(&mut interaction, item(2)), vec![Message::Pick(2)]);
 }

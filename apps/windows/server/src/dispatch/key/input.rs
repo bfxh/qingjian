@@ -1,8 +1,9 @@
 //! 按键怎么作用到 Engine / 高亮上。分流规则与 macOS 壳的 `handle_text` / `handle_command` 对齐。
 
-use qingjian_core::{QUESTION_PREFIX, punctuation, shortcut};
-use qingjian_platform::HighlightKeys;
+use qingjian_core::candidate::arrows::{self, Arrow, ArrowAction, Focus};
+use qingjian_core::{CandidateKind, QUESTION_PREFIX, punctuation, shortcut};
 use qingjian_platform::protocol::KeyEvent;
+use qingjian_platform::{HighlightKeys, NumpadDigit};
 
 use super::{Effect, codes, with_prefix};
 use crate::dispatch::Router;
@@ -11,6 +12,13 @@ impl Router {
     /// 功能键靠键码，其余靠字符。组句中修饰键 + 数字是快捷键；带 Ctrl / Alt / Win 而没配到快捷键的键归应用。
     /// 表达式模式里 Shift + 数字打的是 `^ * ( )`，不当快捷键。
     pub(crate) fn apply_key(&mut self, event: &KeyEvent) -> Effect {
+        if self.config.toggle_traditional.is_some_and(|combo| {
+            event.virtual_key == combo.key.to_ascii_uppercase() as u32
+                && event.modifiers.chord() == combo.modifiers.into()
+        }) {
+            self.toggle_traditional();
+            return Effect::Changed(None);
+        }
         if let Some(effect) = self.apply_panel_key(event) {
             return effect;
         }
@@ -109,9 +117,12 @@ impl Router {
     /// 退格 / Esc / 回车 / Tab / 方向键；没在组句时都交还应用。
     fn apply_function_key(&mut self, event: &KeyEvent) -> Effect {
         if !self.composing() {
-            // 回车交给应用：文本流里是一个段落边界（macOS 壳同样记）
-            if event.virtual_key == codes::RETURN {
-                self.engine.note_passthrough('\n');
+            match event.virtual_key {
+                // 回车交给应用：文本流里是一个段落边界（macOS 壳同样记）
+                codes::RETURN => self.engine.note_passthrough('\n'),
+                // 删的是应用里刚上屏的字：自动空格据此知道光标前还是不是那个字
+                codes::BACK => self.engine.note_backspace(),
+                _ => {}
             }
             return Effect::Passthrough;
         }
@@ -167,6 +178,7 @@ impl Router {
                     Effect::Navigated
                 }
             },
+            codes::DOWN if self.config.two_area_arrows() => self.two_area_key(Arrow::Down),
             codes::DOWN => {
                 // 横排矩阵开着：↓ 展开成矩阵 / 往下换行；否则按 highlight_keys 移高亮
                 if self.config.grid_keys() {
@@ -177,7 +189,14 @@ impl Router {
                 }
             }
             // 高亮还在第一个、没动过时 ↑ 没处可去，拿来开符号面板（矩阵开着时也一样，`↓` 照旧展开矩阵）
-            codes::UP if self.open_panel_from_key() => Effect::Navigated,
+            // 方向键分两区时候选里的 ↑ 是回拼音行，要在拼音行里再按一次才开面板
+            codes::UP
+                if (!self.config.two_area_arrows() || self.focus == Focus::Pinyin)
+                    && self.open_panel_from_key() =>
+            {
+                Effect::Navigated
+            }
+            codes::UP if self.config.two_area_arrows() => self.two_area_key(Arrow::Up),
             codes::UP => {
                 if self.config.grid_keys() {
                     // ↑ 顶在第一排再往上：回到第一个候选（不是毫无动作）
@@ -197,6 +216,8 @@ impl Router {
                 self.page(-1);
                 Effect::Navigated
             }
+            codes::LEFT if self.config.two_area_arrows() => self.two_area_key(Arrow::Left),
+            codes::RIGHT if self.config.two_area_arrows() => self.two_area_key(Arrow::Right),
             codes::LEFT => self.horizontal_key(-1),
             codes::RIGHT => self.horizontal_key(1),
             codes::HOME => {
@@ -209,6 +230,36 @@ impl Router {
             }
             _ => Effect::Passthrough,
         }
+    }
+
+    /// 横排、高亮移动键选 `←` / `→` 时（`RouterConfig::two_area_arrows`）方向键照 Core 的 `arrows::route` 在拼音行与候选两区之间走，
+    /// 规则与 macOS 壳的 `two_area_arrow` 同一份。没有候选时 ← / → 照旧移拼音光标。
+    fn two_area_key(&mut self, arrow: Arrow) -> Effect {
+        if self.candidate_count() == 0 {
+            return match arrow {
+                Arrow::Left | Arrow::Right => {
+                    self.move_caret(if arrow == Arrow::Left { -1 } else { 1 });
+                    Effect::Changed(None)
+                }
+                Arrow::Up | Arrow::Down => Effect::Navigated,
+            };
+        }
+        match arrows::route(arrow, self.focus, self.matrix()) {
+            ArrowAction::MoveCursor(delta) => {
+                self.move_caret(delta);
+                return Effect::Changed(None);
+            }
+            ArrowAction::MoveHighlight(delta) => self.move_cells_or_highlight(delta),
+            ArrowAction::MoveRow(delta) => {
+                self.move_rows(delta);
+            }
+            ArrowAction::Expand => {
+                self.move_rows(1);
+            }
+            ArrowAction::Focus(focus) => self.focus = focus,
+            ArrowAction::Stay => {}
+        }
+        Effect::Navigated
     }
 
     /// `↑` / `↓`：按 `[shortcut] highlight_keys` 移高亮。高亮键配成 `←` / `→` 时它俩没活干，
@@ -275,13 +326,12 @@ impl Router {
             if c.is_ascii_uppercase() && self.engine.in_aux() {
                 self.engine.clear_aux();
             }
-            self.engine.push(c);
-            return Effect::Changed(None);
+            return Effect::Changed(self.push_letter(c));
         }
         if c.is_ascii_uppercase() {
             let raw = self.composing().then(|| self.engine.take_raw());
-            self.engine.note_passthrough(c);
-            return with_prefix(raw, Effect::Passthrough, c);
+            let effect = self.pass_through(c);
+            return with_prefix(raw, effect, c);
         }
         if !self.composing() {
             return self.apply_punctuation(c, event);
@@ -289,9 +339,23 @@ impl Router {
         self.apply_printable(c, event)
     }
 
+    /// 字母进缓冲区，带上形码的两条规则：满码再敲字母先把高亮候选顶上屏，敲满唯一的全码直接上屏。
+    /// 返回这一键上屏的文本（两条都触发时是两段连起来）。
+    fn push_letter(&mut self, c: char) -> Option<String> {
+        let topped = self.engine.code_tops(c).then(|| self.commit_highlighted());
+        self.engine.push(c);
+        let committed: String = topped
+            .into_iter()
+            .chain(self.engine.commit_unique_code())
+            .collect();
+        (!committed.is_empty()).then_some(committed)
+    }
+
     /// 当前模式开着全角就让 Core 转（数字后的 `.` 与小键盘的键保持半角）；转不了的原样交给应用并告知 Core。
     fn apply_punctuation(&mut self, c: char, event: &KeyEvent) -> Effect {
         let english = event.modifiers.caps || event.modifiers.english_mode;
+        // 数字与字母的自动空格要在 punctuate 之前判：它转不了时清掉上屏记录，之后就不知道上文了
+        let lead = c.is_ascii_alphanumeric() && self.engine.auto_space_before(&c.to_string());
         if !codes::is_keypad(event.virtual_key)
             && self.full_width_for(english)
             && let Some(text) = self.engine.punctuate(c)
@@ -299,7 +363,22 @@ impl Router {
             return Effect::Changed(Some(text.to_owned()));
         }
         self.engine.note_passthrough(c);
-        Effect::Passthrough
+        if lead {
+            Effect::Changed(Some(format!(" {c}")))
+        } else {
+            Effect::Passthrough
+        }
+    }
+
+    /// 字符原样交给应用；开了自动空格且与上文是中西文交界时改由我们连同空格一起插入（macOS 壳的 `pass_through` 同理）。
+    fn pass_through(&mut self, c: char) -> Effect {
+        let lead = self.engine.auto_space_before(&c.to_string());
+        self.engine.note_passthrough(c);
+        if lead {
+            Effect::Changed(Some(format!(" {c}")))
+        } else {
+            Effect::Passthrough
+        }
     }
 
     /// 英文模式。开着候选：字母进缓冲区，选词与中文模式一样（空格选高亮、数字选当前页第 N 个、翻页键翻页），
@@ -311,8 +390,9 @@ impl Router {
         if !candidates {
             let raw = composing.then(|| self.engine.take_raw());
             let effect = if c.is_ascii_alphabetic() {
+                let lead = self.engine.auto_space_before(&c.to_string());
                 self.engine.note_passthrough(c);
-                Effect::Changed(Some(c.to_string()))
+                Effect::Changed(Some(if lead { format!(" {c}") } else { c.to_string() }))
             } else {
                 self.apply_punctuation(c, event)
             };
@@ -363,10 +443,16 @@ impl Router {
             return Effect::Changed(None);
         }
         // 英文直输段（缓冲区里已有 `-` 这类字符）：可见字符一律追加，数字与翻页键也不再选词 / 翻页；
-        // 空格整段原样上屏，空格本身也要在（`hello, world`）。
+        // 空格整段原样上屏，空格本身也要在（`hello, world`）；高亮挪到邮箱地址上时只上屏地址。
         if self.engine.raw_mode() {
             if c == ' ' {
+                let address = self
+                    .layout_candidate(self.highlight)
+                    .is_some_and(|candidate| candidate.kind == CandidateKind::Shortcut);
                 let committed = self.commit_highlighted();
+                if address {
+                    return Effect::Changed(Some(committed));
+                }
                 self.engine.note_passthrough(c);
                 return with_prefix(Some(committed), Effect::Passthrough, c);
             }
@@ -374,6 +460,18 @@ impl Router {
                 self.engine.push(c);
                 return Effect::Changed(None);
             }
+        }
+        // 只改普通中文组句；表达式、码点、问字与注音保留各自数字键语义。
+        if self.config.numpad_digit == NumpadDigit::Direct
+            && (0x60..=0x69).contains(&event.virtual_key)
+            && c.is_ascii_digit()
+            && !expression
+            && !self.engine.question_mode()
+            && !self.engine.is_zhuyin_mode()
+        {
+            self.engine.clear_aux();
+            self.engine.push(c);
+            return Effect::Changed(None);
         }
         // 辅码触发键：拼音打完整了、这个键也没被键盘方案吃掉 → 进辅码态（触发键不进缓冲区）
         if self.engine.aux_trigger(c) {
@@ -417,15 +515,17 @@ impl Router {
         // 表达式 / 问字模式下的其他字符不进缓冲区（与 macOS 壳一致），辅码态里敲标点同理（码段随之清空）；
         // 普通拼音组句里的标点也一样——会转全角的（`,` `.` `?` `!` 引号、括号这些）先把高亮候选上屏再补标点
         //（`nihao,` 一气打完「你好，」），翻页键已在前面上方拦走，数字后的 `.` 是否保持半角由 Core 判断；
-        // 这条上屏行为由 `[general] punct_commits` 控制（缺省关：标点进英文直输段）。
+        // 这条上屏行为由 `[general] punct_commits` 控制（缺省关：标点进英文直输段），单用形码时总是上屏（五笔的习惯）。
         // 不会转的符号（`-` `/` `@`）仍进英文直输段；`'` 是隔音符，任何模式都进缓冲区。
         if (c != '\''
             && (expression
                 || self.engine.question_mode()
-                || (self.config.punct_commits && punctuation::converts(c))))
+                || ((self.config.punct_commits || self.engine.composing_code())
+                    && punctuation::converts(c))))
             || self.engine.in_aux()
         {
-            let committed = self.commit_highlighted();
+            // 高亮候选没吃完拼音时它留在组句里：连同前面留着的先交给应用，标点才接得在后面
+            let committed = self.commit_highlighted() + &self.engine.take_held();
             let effect = self.apply_punctuation(c, event);
             return with_prefix(Some(committed), effect, c);
         }
@@ -441,8 +541,12 @@ impl Router {
         (digit <= page_size && index < self.candidate_count()).then_some(index)
     }
 
-    /// 上屏高亮候选；没有候选时缓冲原样上屏。
+    /// 上屏高亮候选；没有候选时缓冲原样上屏，形码空码（编码查不到词）时清掉编码、什么都不上屏。
     fn commit_highlighted(&mut self) -> String {
+        if self.engine.composing_code() && self.candidate_count() == 0 {
+            self.engine.clear();
+            return String::new();
+        }
         match self.commit_index(self.highlight) {
             Some(text) => text,
             None => self.engine.take_raw(),

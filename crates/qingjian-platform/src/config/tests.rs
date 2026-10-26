@@ -67,6 +67,11 @@ fn general_and_shortcut_sections_parse() {
     assert_eq!(config.general.symbols, EmojiCount::new(1));
     assert!(config.general.english_in_chinese);
     assert_eq!(
+        config.general.english_max_in_chinese(),
+        qingjian_core::ENGLISH_CANDIDATES_MAX
+    );
+    assert_eq!(config.general.english_min_position(), 1);
+    assert_eq!(
         config.general.traditional(),
         qingjian_core::TraditionalVariant::Off
     );
@@ -163,6 +168,28 @@ fn set_value_writes_strings_and_integers() {
     assert_eq!(config.general.page_size, 5);
     assert_eq!(config.general.appearance(), Appearance::Dark);
     assert_eq!(config.shortcut.mode.question, 'i');
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn per_scheme_code_rules_go_into_nested_sections() {
+    let path = std::env::temp_dir().join("qingjian-config-code-rules-test.toml");
+    std::fs::write(&path, "[general]\ncode = \"wubi86\"\n").unwrap();
+    Config::set_value(&path, "code.wubi86", "top", false).unwrap();
+    Config::set_value(&path, "code.wubi86", "auto_commit", true).unwrap();
+    Config::set_value(&path, "code.huma", "top", true).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("[code.wubi86]") && !text.contains("[code]\n"));
+    let config = Config::load(&path).unwrap();
+    assert_eq!(
+        config.code_rules("wubi86"),
+        CodeRules {
+            auto_commit: Some(true),
+            top: Some(false),
+        }
+    );
+    assert_eq!(config.code_rules("huma").top, Some(true));
+    assert_eq!(config.code_rules("zhengma"), CodeRules::default());
     let _ = std::fs::remove_file(&path);
 }
 

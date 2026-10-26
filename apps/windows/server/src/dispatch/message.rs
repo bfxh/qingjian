@@ -131,6 +131,7 @@ impl Router {
     fn handle_key(&mut self, session: SessionId, event: KeyEvent) -> ServerMessage {
         self.ensure_focus(session);
         self.notice = None;
+        self.candidates.close_menu();
         if self.translation.is_some() {
             return self.handle_translation_review(session, &event);
         }
@@ -165,6 +166,8 @@ impl Router {
             (Some(clicked), commit) => Some(clicked + commit.as_deref().unwrap_or_default()),
             (None, commit) => commit,
         };
+        // 选词没选完一段拼音时 Core 把词留在组句里、上屏文本是空串：不让 DLL 结束组句
+        let commit = commit.filter(|text| !text.is_empty());
         self.poll_prediction();
         // 自绘窗吃未降级的帧；发给 DLL 的那份按老协议降级（见 composed 的 current_frame）
         let shown = self.self_drawn_frame();
@@ -174,6 +177,7 @@ impl Router {
             outcome,
             commit,
             frame: self.current_frame(),
+            english: None,
         }
     }
 

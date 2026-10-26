@@ -25,11 +25,6 @@ impl Settings {
         );
         self.write(
             "shortcut",
-            "delete_candidate",
-            defaults.delete_candidate.key(),
-        );
-        self.write(
-            "shortcut",
             "translate_selection",
             defaults.translate_selection.key_string(),
         );
@@ -44,6 +39,9 @@ impl Settings {
         }
         if Feature::TogglePunctuation.here() {
             self.write("shortcut", "toggle_punctuation", "");
+        }
+        if Feature::ToggleTraditional.here() {
+            self.write("shortcut", "toggle_traditional", "");
         }
         self.recording = None;
     }

@@ -1,4 +1,5 @@
-//! 弹出菜单：贴在触发它的控件（下拉框）下面（下面放不下时上面）的一列选项，长了能滚；选中项打勾，悬停垫底色。
+//! 弹出菜单：贴在触发它的控件（下拉框）下面（下面放不下时上面）的一列选项，长了能滚；选中项打勾，悬停垫底色，
+//! 暂时不能选的项变灰、点了没反应。
 //! 画在同一个窗口里（不能超出窗口），盖一层透明的遮挡接住菜单外的点击，点外面就关。返回的节点要放在根节点的最后一个子节点，才盖得住别的东西。
 
 use std::hash::Hash;
@@ -9,10 +10,11 @@ use taffy::{Dimension, FlexDirection, LengthPercentageAuto, NodeId, Position, Re
 use super::ScrollArea;
 use super::WidgetTheme;
 use super::check_mark::CheckMark;
-use super::parts::{centered, label, overlay, padding, row, solid};
+use super::parts::{DISABLED_OPACITY, centered, label, overlay, padding};
+use super::popup_menu::{item_style, item_visual, panel_shadow, panel_visual};
 use crate::animation::Easing;
 use crate::error::RenderError;
-use crate::scene::{Effect, EffectKind, Visual};
+use crate::scene::Visual;
 use crate::ui::{Interact, Ui};
 
 /// 菜单最宽、最高（点），离窗口底边与触发控件的距离（点）。
@@ -28,6 +30,9 @@ pub struct Menu<'a> {
     items: &'a [&'a str],
 
     selected: Option<usize>,
+
+    /// 变灰的项（序号）。
+    disabled: &'a [usize],
 
     /// 触发控件的矩形（像素，上一帧的）与窗口大小（像素）。
     anchor: (f32, f32, f32, f32),
@@ -46,9 +51,14 @@ impl<'a> Menu<'a> {
         Self {
             items,
             selected,
+            disabled: &[],
             anchor,
             window,
         }
+    }
+
+    pub fn disabled(self, disabled: &'a [usize]) -> Self {
+        Self { disabled, ..self }
     }
 
     /// `on_pick(序号)` 点了一项时产出；`on_dismiss` 点了菜单外面时产出（Esc 由使用方在根上接）。
@@ -108,22 +118,25 @@ impl<'a> Menu<'a> {
                 .scene()
                 .node(centered(side, side), Visual::Group, &mark)?;
             let text = label(ui, theme, item, theme.font.size, 400, colors.text)?;
-            let fill = (state.hovered || state.pressed).then_some(if state.pressed {
-                colors.pressed
-            } else {
-                colors.hover
-            });
-            let node = ui.scene().node(
-                Style {
-                    padding: padding(theme, 5.0, 8.0),
-                    flex_shrink: 0.0,
-                    ..row(theme, 6.0)
-                },
-                solid(fill, None, radius - theme.px(2.0)),
-                &[check, text],
-            )?;
+            let disabled = self.disabled.contains(&index);
+            let fill =
+                (!disabled && (state.hovered || state.pressed)).then_some(if state.pressed {
+                    colors.pressed
+                } else {
+                    colors.hover
+                });
+            let node =
+                ui.scene()
+                    .node(item_style(theme), item_visual(theme, fill), &[check, text])?;
+            if disabled {
+                ui.scene().set_opacity(node, DISABLED_OPACITY);
+            }
             ui.fade(node, item_key, theme.hover, Easing::Ease);
-            ui.interact(node, item_key, Interact::new().on_click(on_pick(index)));
+            ui.interact(
+                node,
+                item_key,
+                Interact::new().on_click(on_pick(index)).disabled(disabled),
+            );
             rows.push(node);
         }
         let list = ui.scene().node(
@@ -161,25 +174,11 @@ impl<'a> Menu<'a> {
                 flex_direction: FlexDirection::Column,
                 ..Style::default()
             },
-            solid(
-                Some(colors.popup),
-                Some((theme.px(1.0), colors.line)),
-                radius,
-            ),
+            panel_visual(theme),
             &[scroll],
         )?;
         ui.scene().set_clip(panel, radius);
-        ui.scene().set_effects(
-            panel,
-            vec![Effect {
-                kind: EffectKind::DropShadow,
-                x: 0.0,
-                y: theme.px(6.0),
-                blur: theme.px(16.0),
-                spread: 0.0,
-                color: colors.shadow,
-            }],
-        );
+        ui.scene().set_effects(panel, vec![panel_shadow(theme)]);
         let scrim = ui.scene().node(overlay(), Visual::Group, &[])?;
         ui.interact(
             scrim,

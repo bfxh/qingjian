@@ -39,7 +39,8 @@ cd "$ROOT"
 # 构建标识进「关于」页与诊断信息：git 短哈希（工作区有改动加 +）与日期；编译期 option_env! 读
 GIT_REV="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then GIT_REV="${GIT_REV}+"; fi
-export QINGJIAN_BUILD="${GIT_REV} · $(date +%Y-%m-%d)"
+QINGJIAN_BUILD="${GIT_REV} · $(date +%Y-%m-%d)"
+export QINGJIAN_BUILD
 BUILD_ARGS=(-p "$BIN_NAME" -p qingjian-settings --locked)
 [[ "$PROFILE" == "release" ]] && BUILD_ARGS+=(--release)
 BIN_DIR="target/$PROFILE"
@@ -84,14 +85,19 @@ cp assets/sample/*.tsv "$APP/Contents/Resources/"
 cp assets/emoji/*.tsv "$APP/Contents/Resources/"
 # 词汇等级表（CEFR-J / Octanove / JLPT，见 assets/levels/README.md），「统计」页按级数词汇
 cp assets/levels/levels-*.tsv "$APP/Contents/Resources/"
-# 五笔码表（输入方案选五笔时用，见 assets/wubi/README.md；极点 86 码表，Apache-2.0）
-mkdir -p "$APP/Contents/Resources/wubi"
-cp assets/wubi/wubi86.tsv "$APP/Contents/Resources/wubi/"
+# 随包形码方案（五笔，见 assets/schemes/wubi86/README.md；极点 86 码表，Apache-2.0）：每套只拷 scheme.toml 与码表
+for scheme in assets/schemes/*/; do
+  name=$(basename "$scheme")
+  mkdir -p "$APP/Contents/Resources/schemes/$name"
+  cp "$scheme"scheme.toml "$scheme"table.tsv "$APP/Contents/Resources/schemes/$name/"
+done
 if [[ -f data/generated/dict.tsv || -f data/generated/dict.qj ]]; then
   # 词库与语言模型打成 .qj（mmap 直接用），TSV 比 .qj 新时重新打包；只有 .qj（CI 从数据包解出来的）就直接用
-  if [[ -f data/generated/dict.tsv && ( ! -f data/generated/dict.qj || data/generated/dict.tsv -nt data/generated/dict.qj ) ]]; then
+  # dict-cleaned.tsv 是青简词库已清洗的部分，pack dict 缺省与 dict.tsv 合成一份
+  if [[ -f data/generated/dict.tsv && ( ! -f data/generated/dict.qj || data/generated/dict.tsv -nt data/generated/dict.qj \
+        || ( -f data/generated/dict-cleaned.tsv && data/generated/dict-cleaned.tsv -nt data/generated/dict.qj ) ) ]]; then
     cargo run --release -q -p qingjian-dict-convert -- pack dict --name "青简基础词库" \
-      --license "MIT AND Unicode-3.0" --attribution "通用规范汉字表；现代汉语常用词表（liuxilu 校对版）；THUOCL（清华大学自然语言处理实验室，MIT）；读音 Unihan（Unicode）" \
+      --license "MIT AND Unicode-3.0 AND GPL-3.0-or-later" --attribution "通用规范汉字表；现代汉语常用词表（liuxilu 校对版）；THUOCL（清华大学自然语言处理实验室，MIT）；读音 Unihan（Unicode）；青简词库（GPL-3.0-or-later）" \
       --source https://github.com/qingjian-team/qingjian/tree/main/assets/lexicon
   fi
   if [[ -f data/generated/lm-bigram.tsv && ( ! -f data/generated/lm.qj || data/generated/lm-bigram.tsv -nt data/generated/lm.qj ) ]]; then
@@ -105,18 +111,13 @@ if [[ -f data/generated/dict.tsv || -f data/generated/dict.qj ]]; then
     cp data/generated/dicts/*.qj "$APP/Contents/Resources/dicts/"
   fi
   [[ -f data/generated/lm.qj ]] && cp data/generated/lm.qj "$APP/Contents/Resources/"
-  # 含章·知微（字级 Transformer）：三件套与单文件放 data/models/hanzhang-zhiwei/。
-  model_dir="${QINGJIAN_MODEL_DIR:-data/models/hanzhang-zhiwei}"
-  if [[ -f "$model_dir/model.safetensors" ]]; then
-    QINGJIAN_MODEL_DIR="$model_dir" tools/release/pack-model.sh
-  fi
-  if [[ -f "$model_dir/hanzhang-zhiwei-small.qjm" ]]; then
-    mkdir -p "$APP/Contents/Resources/models/hanzhang-zhiwei"
-    cp "$model_dir/hanzhang-zhiwei-small.qjm" "$APP/Contents/Resources/models/hanzhang-zhiwei/"
-    chmod 644 "$APP/Contents/Resources/models/hanzhang-zhiwei/hanzhang-zhiwei-small.qjm"
-    echo "打包含章·知微：$model_dir/hanzhang-zhiwei-small.qjm"
+  # 随包辅码码表（笔画，CNS11643 筆順資料派生，需署名）放 Resources/codes/，与 Windows 的 data\generated\codes 同一份
+  if ls data/generated/codes/*.qj >/dev/null 2>&1; then
+    mkdir -p "$APP/Contents/Resources/codes"
+    cp data/generated/codes/*.qj assets/stroke/LICENSE-CNS11643.txt "$APP/Contents/Resources/codes/"
   fi
   # 含章·通变（P2C，带噪拼音 → 汉字）：放 Resources/models/hanzhang-tongbian/。
+  # 含章·知微（字级模型）不随包：有通变时三个桌面平台都不加载它，用户自己放进数据目录 models/hanzhang-zhiwei/ 仍认
   p2c_dir="${QINGJIAN_P2C_MODEL_DIR:-data/models/hanzhang-tongbian}"
   if [[ -f "$p2c_dir/model.safetensors" ]]; then
     QINGJIAN_MODEL_DIR="$p2c_dir" tools/release/pack-model.sh

@@ -1,4 +1,4 @@
-//! 「统计」页：顶上分「输入 / 云服务」两层，每层是四张数字卡（今天、本周、本月、累计）、按天的格子图、过去 24 小时的柱状图和详情；
+//! 「统计」页：顶上分「输入 / 云服务」两层，每层是四张数字卡（今天、近 7 天、本月、累计）、按天的格子图、过去 24 小时的柱状图和详情；
 //! 输入层末尾是词汇（学习语言的译词见过、看熟、上屏过，有等级表时按级列）。云服务层只在记用量的平台显示。
 
 mod charts;
@@ -143,7 +143,7 @@ const NONE_YET: &str = "还没有记录";
 /// 「请求 12 次，收到 11 次，失败 1 次」，还在等的、没报用量的另说。
 fn requests_line(api: &ApiUsageStats) -> String {
     if api.requests == 0 {
-        return "还没有发过请求：云联想、译词补充、翻译选中文字和「测试连接」都算".to_owned();
+        return "还没有发过请求".to_owned();
     }
     let mut line = format!(
         "请求 {} 次，收到 {} 次，失败 {} 次",
@@ -196,13 +196,13 @@ fn tokens(ui: &mut Ui<Message>, page: &Page, api: &ApiUsageStats) -> Result<Node
     )
 }
 
-/// 「见过 120 个词，看熟 80 个；上屏过 60 个，直接打出过 3 个；本周新见 12 个」
+/// 「见过 120 个词，看熟 80 个；上屏过 60 个，直接打出过 3 个；近 7 天新见 12 个」
 fn vocabulary_line(summary: &VocabularySummary) -> String {
     if summary.seen == 0 {
         return "还没见过译词：打中文时候选右侧的译词就是词汇的来源".to_owned();
     }
     format!(
-        "见过 {} 个词，看熟 {} 个；上屏过 {} 个，直接打出过 {} 个；本周新见 {} 个",
+        "见过 {} 个词，看熟 {} 个；上屏过 {} 个，直接打出过 {} 个；近 7 天新见 {} 个",
         group_digits(summary.seen),
         group_digits(summary.familiar),
         group_digits(summary.committed),

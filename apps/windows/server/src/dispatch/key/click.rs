@@ -26,6 +26,8 @@ impl Router {
             HitTarget::Translation { candidate, sense } => self
                 .annotated_candidate_on_page(candidate + 1)
                 .and_then(|candidate| self.engine.commit_translation(&candidate, sense)),
+            // 菜单项在菜单自己的窗口里点，候选窗不会给出
+            HitTarget::MenuItem(_) => None,
         };
         let Some(text) = text else {
             tracing::debug!(?target, "点中的格子没有可上屏的");
@@ -47,8 +49,9 @@ impl Router {
 
     /// 点击上屏的文本挂到会话上等 DLL 取走，再按新状态重画。
     pub(in crate::dispatch) fn deliver_clicked(&mut self, session: SessionId, text: String) {
-        let pending = self.take_clicked(session).unwrap_or_default();
-        self.clicked = Some((session, pending + &text));
+        let pending = self.take_clicked(session).unwrap_or_default() + &text;
+        // 选的词没选完一段拼音时留在组句里，没有要交给 DLL 的
+        self.clicked = (!pending.is_empty()).then_some((session, pending));
         self.recompose();
         let shown = self.self_drawn_frame();
         self.reconcile_candidates(&shown);

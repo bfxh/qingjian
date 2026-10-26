@@ -6,13 +6,18 @@
 mod alignment;
 mod annotation;
 mod aux_code;
+mod candidate_menu;
+mod choice;
+mod code_keys;
 mod commit;
 mod composing;
 mod correcting;
 mod decoded;
 mod extras;
 mod gloss;
+mod held;
 mod input_log;
+mod key_hint;
 mod learning;
 mod marked;
 mod mode_keys;
@@ -21,6 +26,7 @@ mod prediction;
 mod privacy;
 mod query;
 mod raw;
+mod reading;
 mod rescoring;
 mod session;
 mod setup;
@@ -29,21 +35,23 @@ mod statistics;
 mod timings;
 mod translator;
 mod vocabulary;
+mod voice;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use qingjian_dictionary::{AuxCodeLookup, CodeTable, Dictionary, Match, WordList};
+use qingjian_dictionary::{AuxCodeLookup, Dictionary, Match, WordList};
 
 pub use alignment::Alignment;
 pub use annotation::AnnotationReport;
 pub use aux_code::is_valid_aux_code_key;
+pub use choice::{ChoiceModel, ChoiceTier};
 pub use commit::{LastCommit, Transition};
 pub use gloss::{FilledGloss, GlossFiller, NoGlossFiller};
 pub use input_log::{
-    CommitEntry, INPUT_LOG_VERSION, InputLogEntry, InputLogger, InputSource, LOGGED_CANDIDATES,
-    NoInputLogger,
+    ChoiceNote, CommitEntry, INPUT_LOG_VERSION, InputLogEntry, InputLogger, InputSource,
+    LOGGED_CANDIDATES, NoInputLogger,
 };
 pub use learning::{Forgotten, Learner, NoLearner};
 pub use marked::{AuxSegment, MarkedKind, MarkedSegment};
@@ -64,13 +72,14 @@ pub use vocabulary::{
 };
 
 use crate::candidate::{Candidate, CandidateKind, CandidateList, Language};
+use crate::code_scheme::CodeScheme;
 use crate::composition::Composition;
 use crate::correction::{self, Correction, TypoCosts, typo};
 use crate::emoji::EmojiTable;
 use crate::english;
 use crate::fuzzy::{Expanded, FuzzyRules};
 use crate::history::InputHistory;
-use crate::panel::SymbolPanel;
+use crate::panel::{NoPanelHistory, PanelHistory, SymbolPanel};
 use crate::parser::{self, ParseError, Segmentation};
 use crate::punctuation::Punctuation;
 use crate::ranking::{self, Scored};
@@ -78,7 +87,7 @@ use crate::sentence::{
     self, Conversion, Interpolation, LanguageModel, NoLanguageModel, SentenceScorer,
 };
 use crate::shortcut;
-use crate::shuangpin::Scheme;
+use crate::shuangpin::Layout;
 use crate::traditional::Traditional;
 
 use commit::CommitChain;
@@ -122,7 +131,7 @@ pub struct Engine {
     /// 中文标点转换开关。
     full_width_punctuation: bool,
 
-    /// 用户定义的固定位置文本。
+    /// 用户定义的短语，按输入码精确匹配、按权重排在最前。
     custom_phrases: Vec<crate::CustomPhrase>,
 
     /// 中文模式下整段是英文词（或像英文词的开头）时给不给英文候选与补全（配置 `[general] english_in_chinese`，缺省开）。
@@ -130,6 +139,12 @@ pub struct Engine {
 
     /// 中英混输时中文候选总在英文词前面（缺省关：拼音不像话的输入英文词排第一，常在中文模式里打英文词的人靠它）。
     chinese_first: bool,
+
+    /// 中文模式下英文候选（精确词 + 补全）最多几个（配置 `[general] english_max_in_chinese`，缺省 4）。
+    english_max_in_chinese: usize,
+
+    /// 有中文候选时英文最高排到第几位（配置 `[general] english_min_position`，缺省 1 即不限制）。
+    english_min_position: usize,
 
     /// 中西文混排自动补空格（配置 `[general] auto_space`，缺省关）。见 [`crate::spacing`]。
     auto_space: bool,
@@ -140,6 +155,9 @@ pub struct Engine {
 
     /// 联想提供方，缺省为 [`NoPredictor`]。
     predictor: Box<dyn Predictor>,
+
+    /// 显式选区翻译的独立提供方；未设置时沿用联想服务。
+    translation_predictor: Option<Box<dyn Predictor>>,
 
     /// 整句转换的语言模型，缺省为 [`NoLanguageModel`]（退化成一元词频）。
     language_model: Box<dyn LanguageModel>,
@@ -152,6 +170,12 @@ pub struct Engine {
 
     /// 「前文 + 整句文本 → 神经分」缓存，同步与异步打分共用。
     neural_cache: std::cell::RefCell<rescoring::NeuralCache>,
+
+    /// 选词模型（试验）：候选窗前几条交给它重排一次，见 [`choice`]。
+    choice: Option<choice::ChoiceRanker>,
+
+    /// 选词模型比几条、看多长前文。
+    choice_tier: choice::ChoiceTier,
 
     /// 壳给的应用里光标前的文本；`None` 时前文用本会话历史。
     rescoring_before: Option<String>,
@@ -194,8 +218,17 @@ pub struct Engine {
     /// 最近一次查询的候选顺序是否经过神经重排（`rescore_paths` 置位，`query` 开头清零），写进输入日志。
     last_rescored: std::cell::Cell<bool>,
 
+    /// 最近一次查询里选词模型排过这页的记录（`rerank_choices` 写，`query` 开头清零），写进输入日志。
+    last_choice: std::cell::Cell<Option<input_log::ChoiceNote>>,
+
     /// 这段组句里第一次退格前的缓冲区：上屏时与最终键串不同就记一条 `retype`。
     retype_snapshot: Option<String>,
+
+    /// 前面选好、还没交给应用的词（见 `held` 模块）。
+    held: Vec<held::HeldSelection>,
+
+    /// 选词后剩下拼音时先不上屏（[`Self::set_hold_selections`]，缺省开）。
+    hold_selections: bool,
 
     /// 组句外直通给应用的字符，攒到下一次上屏或上文断开时写成一条 `passthrough`。
     passthrough_pending: String,
@@ -218,6 +251,9 @@ pub struct Engine {
     /// 输入统计的累计方（打了多少字）；缺省不记。
     meter: Box<dyn UsageMeter>,
 
+    /// 上屏记不记进输入统计（见 [`Self::set_metered`]）；壳的工具框（快捷翻译的原文、常用语编辑）里关掉。
+    metered: bool,
+
     /// 学习语言的词汇记录（见过 / 上屏过哪些译词）；缺省不记也不标生词。
     vocabulary: Box<dyn VocabularyTracker>,
 
@@ -239,7 +275,7 @@ pub struct Engine {
     /// 整句转换的格子候选缓存：跨按键复用，学习数据一变就清（见 [`Self::forget_span_cache`]）。
     span_cache: std::cell::RefCell<sentence::SpanCache>,
 
-    /// 本次会话经我们上屏的文本，应用不给上下文时用它联想。
+    /// 本次会话经我们上屏的文本，按应用分开记；应用不给光标前文时给模型当前文。
     history: InputHistory,
 
     /// 最近一次联想请求的序号，0 表示还没发过。
@@ -255,7 +291,7 @@ pub struct Engine {
     fuzzy: FuzzyRules,
 
     /// 双拼方案，`None` 为全拼。开着时缓冲区里是双拼键，查词前先解成全拼（见 [`crate::shuangpin`]）。
-    shuangpin: Option<Scheme>,
+    shuangpin: Option<Arc<Layout>>,
 
     /// 双拼方案下 preedit 显示原始按键（如 `ljse`）还是展开成全拼（`lan'se`）。
     shuangpin_raw_preedit: bool,
@@ -263,8 +299,11 @@ pub struct Engine {
     /// 注音模式开关，開著時緩衝區裡是注音大千鍵位，查詞前先解成拼音（見 [`crate::zhuyin`]）。
     zhuyin: bool,
 
-    /// 形码码表（五笔）。`Some` 时编码参与查询，按前缀查表（见 [`Engine::query_code`]）。
-    code: Option<CodeTable>,
+    /// 九宫格方案：缓冲区里是数字键（可混着已选定的字母），见 [`crate::nine_key`]。
+    nine_key: bool,
+
+    /// 形码方案（五笔或用户导入的）。`Some` 时编码参与查询，按前缀查表（见 [`Engine::query_code`]）。
+    code: Option<CodeScheme>,
 
     /// 拼音侧（全拼 / 双拼 / 注音）参不参与查询，缺省参与。
     ///
@@ -293,6 +332,9 @@ pub struct Engine {
     /// 打开着的符号面板；`None` 是没开。上屏与清空时关掉。
     panel: Option<SymbolPanel>,
 
+    /// 面板条目的使用记录：打开面板时排「常用」，从面板上屏时记一次；缺省不记。
+    panel_history: Box<dyn PanelHistory>,
+
     /// 辅码态：`None` 是拼音态，`Some` 是辅码态（空串 = 刚敲下触发键、码段还没开始）。
     /// 码段不进 `composition`：它与拼音分段记账、分段画（见 [`AuxSegment`]）。
     aux_code: Option<String>,
@@ -303,6 +345,9 @@ pub struct Engine {
     /// 候选上是否显示码（配置项 `[general] aux_code_show`，缺省关）：纯拼音态逐候查首条码的短路开关，
     /// 由壳装配时告知（辅码态不受它管，看码有引导意义）。
     aux_show: bool,
+
+    /// 拼音行按高亮候选显示带调拼音（配置项 `[general] show_tones`，缺省关），见 [`Self::toned_syllables`]。
+    show_tones: bool,
 
     /// 进辅码态的触发键，配置项 `[general] aux_code_key`，缺省 [`DEFAULT_AUX_CODE_KEY`]。
     aux_code_key: char,
@@ -318,11 +363,11 @@ pub struct Engine {
     traditional: Traditional,
 }
 
-/// 形码编码最长几位（五笔四码）：混输下超过它的输入只可能是拼音。
-const MAX_CODE_LENGTH: usize = 4;
-
 /// 英文补全最多几条（`compa` → company / compare / …）。
 const ENGLISH_COMPLETIONS: usize = 3;
+
+/// 中文模式下英文候选的缺省上限：1 条精确词 + 3 条补全，与以前的行为一致。
+pub const ENGLISH_CANDIDATES_MAX: usize = ENGLISH_COMPLETIONS + 1;
 
 /// 原样上屏的字母串至少几个字母才当英文词学：单字母（`a`、`I`）不值得记。
 const MIN_ENGLISH_WORD_LETTERS: usize = 2;
@@ -360,6 +405,9 @@ const EMOJI_PER_WORD: usize = 2;
 const KAOMOJI_PER_WORD: usize = 1;
 const EMOJI_TOTAL: usize = 3;
 
+/// 「日期 / 时间 / 星期」这几个词排在前几条里才跟快捷写法（同 emoji 配词的范围；九宫格 7474 的日期常排第四）：再往后多半是长输入的前缀词。
+const KEYWORD_SCAN: usize = 5;
+
 /// 自动造词：用户连着选出的两个词，合起来不在词库里、且这条接续已记过这么多次，就记成用户词。
 /// 同一段拼音里连着选出来的（`qingjian` 选 青 再选 简）是「用户把它当一个词打」的强信号，两次就够；
 /// 第一次可能是误选或偶然。
@@ -396,6 +444,9 @@ const RESCORE_PATHS: usize = 6;
 /// 长输入最多给几条整句候选（重排后的前几条路径）：一条不够用，长句错一个字就得拆开重打。
 const SENTENCE_CANDIDATES: usize = 3;
 
+/// 结构上打平的切分（`shang ou` / `shan gou`）最多比几种，见 [`Engine::sentence_segmentation`]。
+const TIED_SEGMENTATIONS: usize = 3;
+
 /// 短于这么多音节的不给备选整句：那时候选表里的词级候选比另一种读法有用。
 const ALTERNATE_MIN_SYLLABLES: usize = 4;
 
@@ -430,13 +481,18 @@ impl Engine {
             custom_phrases: Vec::new(),
             english_in_chinese: true,
             chinese_first: false,
+            english_max_in_chinese: ENGLISH_CANDIDATES_MAX,
+            english_min_position: 1,
             auto_space: false,
             shift_letter_compose: false,
             predictor: Box::new(NoPredictor),
+            translation_predictor: None,
             language_model: Box::new(NoLanguageModel),
             sentence_scorer: None,
             rescorer: None,
             neural_cache: std::cell::RefCell::new(rescoring::NeuralCache::default()),
+            choice: None,
+            choice_tier: choice::ChoiceTier::default(),
             rescoring_before: None,
             neural_weight: NEURAL_WEIGHT,
             neural_margin: NEURAL_MARGIN,
@@ -451,7 +507,10 @@ impl Engine {
             private: false,
             log_sequence: 0,
             last_rescored: std::cell::Cell::new(false),
+            last_choice: std::cell::Cell::new(None),
             retype_snapshot: None,
+            held: Vec::new(),
+            hold_selections: true,
             passthrough_pending: String::new(),
             page_turns: 0,
             composition_started: None,
@@ -459,6 +518,7 @@ impl Engine {
             application: None,
             committed_since_break: false,
             meter: Box::new(NoUsageMeter),
+            metered: true,
             vocabulary: Box::new(NoVocabularyTracker),
             gloss_filler: Box::new(NoGlossFiller),
             displayed: Vec::new(),
@@ -473,6 +533,7 @@ impl Engine {
             shuangpin: None,
             shuangpin_raw_preedit: false,
             zhuyin: false,
+            nine_key: false,
             code: None,
             phonetic: true,
             emoji: None,
@@ -482,9 +543,11 @@ impl Engine {
             symbols: None,
             symbol_limit: 1,
             panel: None,
+            panel_history: Box::new(NoPanelHistory),
             aux_code: None,
             aux_enabled: false,
             aux_show: false,
+            show_tones: false,
             aux_code_key: DEFAULT_AUX_CODE_KEY,
             aux_keep_empty: true,
             aux_codes: Vec::new(),
@@ -495,7 +558,7 @@ impl Engine {
 
 /// 缓冲区是否是英文直输段：含拼音键与 `'` 以外的字符（`no-way`、`a.b`），且不是表达式 / 问字模式。
 /// 微软 / 搜狗双拼下 `;` 也是拼音键。
-fn is_raw(text: &str, modes: ModeKeys, shuangpin: Option<Scheme>, zhuyin: bool) -> bool {
+fn is_raw(text: &str, modes: ModeKeys, shuangpin: Option<&Layout>, zhuyin: bool) -> bool {
     let is_key = |c: char| {
         if zhuyin {
             crate::zhuyin::layout::map_key(c).is_some() || c == ' '

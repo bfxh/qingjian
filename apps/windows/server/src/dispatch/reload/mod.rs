@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
 use qingjian_core::{Engine, Language, NoGlossFiller, NoPredictor, NoTranslator};
-use qingjian_platform::{Config, code_tables};
+use qingjian_platform::Config;
 use qingjian_predict::{API_USAGE_FILE, CloudGlossFiller, CloudPredictor, PredictConfig};
 
 pub(super) use self::state::ConfigReload;
@@ -125,6 +125,7 @@ impl Router {
     ) {
         let last_mtime = mtime(&config_path);
         let code_files = dirs.code_snapshot();
+        let code_word_files = dirs.code_word_snapshot();
         let dictionary_files = dirs.dict_snapshot();
         let updates = dirs.user_root.as_deref().map(|dir| {
             qingjian_update::Checker::new(dir.join(UPDATE_STATE_FILE), env!("CARGO_PKG_VERSION"))
@@ -135,6 +136,7 @@ impl Router {
             root,
             dirs,
             code_files,
+            code_word_files,
             last_mtime,
             applied_predict: config.predict.clone(),
             applied_dictionaries: config.dictionaries.clone(),
@@ -184,11 +186,17 @@ impl Router {
             reload.last_mtime = current;
             changed
         };
-        // 用户 `codes/` 下的文件增删或更新（设置页刚导入 / 移除一张码表）：不必等配置改动，下一拍就生效
+        // 用户 `codes/` 或 `schemes/` 下的文件增删或更新（设置页刚导入 / 移除一张码表、改了辅码方案）：不必等配置改动，下一拍就生效
         let codes_changed = {
             let current = reload.dirs.code_snapshot();
             let changed = current != reload.code_files;
             reload.code_files = current;
+            changed
+        };
+        let words_changed = {
+            let current = reload.dirs.code_word_snapshot();
+            let changed = current != reload.code_word_files;
+            reload.code_word_files = current;
             changed
         };
         let path = reload.config_path.clone();
@@ -196,6 +204,9 @@ impl Router {
             self.reload_aux_codes();
         }
         if !config_changed {
+            if words_changed && let Ok(config) = Config::load(&path) {
+                self.reload_schemes(&config);
+            }
             return;
         }
         match Config::load(&path) {
@@ -218,7 +229,7 @@ impl Router {
             tracing::warn!(%error, "自定义短语配置未应用，保持原短语");
         }
         // 拼音侧与形码侧一起装配（双拼 / 注音 / 混输都在里面）
-        self.reload_code_table(config.general.scheme(), config.general.wubi());
+        self.reload_schemes(config);
         self.engine.set_traditional(config.general.traditional());
         self.engine.set_learning(config.general.learning);
         self.engine.set_mode_keys(config.shortcut.mode);
@@ -228,6 +239,7 @@ impl Router {
             .set_aux_keep_empty(config.general.aux_code_keep_empty);
         self.engine.set_aux_enabled(config.aux_code.enabled);
         self.engine.set_aux_show(config.general.aux_code_show);
+        self.engine.set_show_tones(config.general.show_tones);
         self.engine.set_chinese_first(config.general.chinese_first);
         self.engine
             .set_emoji_limit(usize::from(config.general.emoji.get()));
@@ -238,9 +250,18 @@ impl Router {
         self.engine
             .set_english_in_chinese(config.general.english_in_chinese);
         self.engine
+            .set_english_max_in_chinese(config.general.english_max_in_chinese());
+        self.engine
+            .set_english_min_position(config.general.english_min_position());
+        self.engine
             .set_shift_letter_compose(config.general.shift_letter.compose());
+        self.engine.set_auto_space(config.general.auto_space);
         self.engine
             .set_shuangpin_raw_preedit(config.general.shuangpin_raw_preedit);
+        self.engine
+            .set_hold_selections(config.general.hold_selections);
+        self.engine
+            .set_context_memory(config.model.context_memory_seconds);
         let previous = self.config.render_settings();
         let grid_keys = self.config.grid_keys();
         let next = RouterConfig::from(config);
@@ -299,11 +320,7 @@ impl Router {
         let Some(reload) = &self.reload else {
             return;
         };
-        let tables = code_tables::load(
-            reload.dirs.bundled_codes.as_deref(),
-            reload.dirs.user_codes.as_deref(),
-            &reload.applied_aux_code,
-        );
+        let tables = reload.dirs.aux_sources().load(&reload.applied_aux_code);
         if let Some(reload) = &mut self.reload {
             reload.code_files = reload.dirs.code_snapshot();
         }
@@ -311,3 +328,6 @@ impl Router {
         self.engine.set_aux_codes(tables);
     }
 }
+
+#[cfg(test)]
+mod traditional_tests;

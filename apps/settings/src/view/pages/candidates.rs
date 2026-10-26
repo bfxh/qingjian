@@ -1,13 +1,14 @@
-//! 「候选」页：每页几个、译文、输出字形，候选后面的 emoji / 颜文字 / 符号，排序（学习、本地整句模型），英文词。
+//! 「候选」页：每页几个、译文、输出字形、拼音行声调，候选后面的 emoji / 颜文字 / 符号，排序（学习、本地整句模型），英文词。
 
 use bamboo_slip::taffy::NodeId;
 use bamboo_slip::{RenderError, SettingRow, Stepper, Ui, group, section_title};
-use qingjian_core::TraditionalVariant;
-use qingjian_platform::{EmojiCount, MAX_PAGE_SIZE};
+use qingjian_core::{ENGLISH_CANDIDATES_MAX, LEARNING_LANGUAGES, TraditionalVariant};
+use qingjian_platform::{EmojiCount, MAX_PAGE_SIZE, NumpadDigit};
 
 use crate::message::{Message, Popup};
+use crate::support::Feature;
 use crate::view::Page;
-use crate::view::parts::controls::{LANGUAGES, select, toggle_info, toggle_with};
+use crate::view::parts::controls::{choice, select, toggle_info, toggle_with};
 
 pub fn candidates(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderError> {
     let theme = &page.theme;
@@ -25,11 +26,11 @@ pub fn candidates(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Rend
             Message::set("general", "page_size", (size - 1) as i64),
             Message::set("general", "page_size", (size + 1) as i64),
         )?;
-    let language = LANGUAGES
+    let language = LEARNING_LANGUAGES
         .iter()
         .find(|(code, _)| *code == general.learning_language)
         .map_or(general.learning_language.as_str(), |(_, label)| label);
-    let names: Vec<&str> = LANGUAGES.iter().map(|(_, name)| *name).collect();
+    let names: Vec<&str> = LEARNING_LANGUAGES.iter().map(|(_, name)| *name).collect();
     let language = select(
         ui,
         page,
@@ -58,23 +59,47 @@ pub fn candidates(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Rend
             .control(language)
             .build(ui, theme)?,
         SettingRow::new("输出字形")
-            .info("只换字形、不换用语（软件 → 軟件）；台湾与香港的字形取舍不同（裡 / 裏）")
+            .info("软件 → 軟件")
             .control(traditional)
             .build(ui, theme)?,
+        toggle_info(
+            ui,
+            page,
+            "译词显示词性",
+            Some("如 v. develop"),
+            ("general", "translation_pos"),
+            general.translation_pos,
+            general.learning_language_off(),
+        )?,
     ];
-    // 词性标注的接线目前只有 Windows 候选窗（#430）；macOS / Linux 候选行接上后再放开
-    if cfg!(target_os = "windows") {
-        rows.push(
-            toggle_info(
-                ui,
-                page,
-                "译词显示词性",
-                Some("关掉后候选旁只显示译词，不显示 v. / n. / adj. 等标注（如 develop 而非 v. develop）"),
-                ("general", "translation_pos"),
-                general.translation_pos,
-                general.learning_language_off(),
-            )?,
+    if Feature::NumpadDigit.here() {
+        let numpad = choice(
+            ui,
+            page,
+            "numpad-digit",
+            &NumpadDigit::ALL,
+            general.numpad_digit,
+            NumpadDigit::label,
+            |value| Message::set("general", "numpad_digit", value.key()),
+        )?;
+        rows.insert(
+            1,
+            SettingRow::new("小键盘数字")
+                .info("组句中按小键盘数字")
+                .control(numpad)
+                .build(ui, theme)?,
         );
+    }
+    if Feature::ShowTones.here() {
+        rows.push(toggle_info(
+            ui,
+            page,
+            "拼音行显示声调",
+            Some("如 gān'gà"),
+            ("general", "show_tones"),
+            general.show_tones,
+            false,
+        )?);
     }
     out.push(section_title(ui, theme, "显示")?);
     out.push(group(ui, theme, &rows)?);
@@ -113,7 +138,7 @@ pub fn candidates(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Rend
             ui,
             page,
             "学习输入习惯",
-            Some("关掉后不再学，已学的照样用"),
+            Some("关掉后不再学新习惯"),
             ("general", "learning"),
             general.learning,
             false,
@@ -122,7 +147,7 @@ pub fn candidates(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Rend
             ui,
             page,
             "本地整句模型",
-            Some("在本机给整句重新排序，不联网"),
+            Some("在本机排整句，不联网"),
             ("model", "enabled"),
             config.model.enabled,
             false,
@@ -141,6 +166,24 @@ pub fn candidates(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Rend
             general.english_in_chinese,
             false,
         )?,
+        SettingRow::new("英文候选最多几个")
+            .info("1 时只留最靠前的一条")
+            .control(english_max_stepper(
+                ui,
+                page,
+                general.english_max_in_chinese(),
+                !general.english_in_chinese,
+            )?)
+            .build(ui, theme)?,
+        SettingRow::new("英文词最高排到第几位")
+            .info("有中文候选时；1 为不限")
+            .control(english_min_stepper(
+                ui,
+                page,
+                general.english_min_position(),
+                !general.english_in_chinese,
+            )?)
+            .build(ui, theme)?,
         toggle_with(
             ui,
             page,
@@ -153,6 +196,44 @@ pub fn candidates(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Rend
     out.push(section_title(ui, theme, "英文词")?);
     out.push(group(ui, theme, &rows)?);
     Ok(out)
+}
+
+/// 中文模式下英文候选最多几个：1 到 [`ENGLISH_CANDIDATES_MAX`]。
+fn english_max_stepper(
+    ui: &mut Ui<Message>,
+    page: &Page,
+    current: usize,
+    disabled: bool,
+) -> Result<NodeId, RenderError> {
+    Stepper::new(&current.to_string())
+        .limits(current > 1, current < ENGLISH_CANDIDATES_MAX)
+        .disabled(disabled)
+        .build(
+            ui,
+            &page.theme,
+            "english-max",
+            Message::set("general", "english_max_in_chinese", (current - 1) as i64),
+            Message::set("general", "english_max_in_chinese", (current + 1) as i64),
+        )
+}
+
+/// 有中文候选时英文最高排到第几位：1–[`MAX_PAGE_SIZE`]，1 为不限制。
+fn english_min_stepper(
+    ui: &mut Ui<Message>,
+    page: &Page,
+    current: usize,
+    disabled: bool,
+) -> Result<NodeId, RenderError> {
+    Stepper::new(&current.to_string())
+        .limits(current > 1, current < MAX_PAGE_SIZE)
+        .disabled(disabled)
+        .build(
+            ui,
+            &page.theme,
+            "english-min-position",
+            Message::set("general", "english_min_position", (current - 1) as i64),
+            Message::set("general", "english_min_position", (current + 1) as i64),
+        )
 }
 
 /// 候选后面一次最多配几个：不显示、1–3 个。

@@ -35,6 +35,7 @@ impl Router {
             outcome: KeyOutcome::Consumed,
             commit: None,
             frame: Frame::default(),
+            english: None,
         };
         if self.focused != Some(session) || self.pending_selection != Some(request) {
             return empty;
@@ -80,6 +81,7 @@ impl Router {
             outcome,
             commit,
             frame: Frame::default(),
+            english: None,
         }
     }
 
@@ -101,6 +103,7 @@ impl Router {
             preedit: Vec::new(),
             preedit_mode: self.config.preedit,
             cursor: 0,
+            window_preedit: None,
             candidates: CandidateList {
                 items: vec![translate_candidate(text)],
             },

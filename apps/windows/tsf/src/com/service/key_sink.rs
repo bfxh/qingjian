@@ -87,6 +87,8 @@ impl ITfKeyEventSink_Impl for TextService_Impl {
             self.translate_combo.get()
         } else if guid == preserved::GUID_PREDICT && self.shared.composing() {
             self.predict_combo.get()
+        } else if guid == preserved::GUID_TRADITIONAL {
+            self.traditional_combo.get()
         } else {
             None
         };

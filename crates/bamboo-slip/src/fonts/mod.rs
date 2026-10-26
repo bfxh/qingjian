@@ -3,9 +3,11 @@
 //! 文件走 fontdb 的 mmap 加载，只解析名字表与 cmap，Apple Color Emoji 那种 190 MB 的文件也只在用到字形时才读页。
 //! 中日同形字按 locale 回退（cosmic-text 的平台回退表：zh-CN → PingFang SC，ja → Hiragino Sans）。
 
+#[cfg(target_os = "android")]
+mod android;
 #[cfg(target_os = "windows")]
 pub mod directwrite;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -26,7 +28,9 @@ pub use ui_font::UiFont;
 
 #[cfg(target_os = "windows")]
 use self::windows as platform;
-#[cfg(target_os = "linux")]
+#[cfg(target_os = "android")]
+use android as platform;
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use linux as platform;
 #[cfg(target_os = "macos")]
 use macos as platform;
@@ -91,6 +95,8 @@ impl FontLibrary {
                 tracing::debug!(path = %path.display(), "字体不存在，或没有 swash 能画的轮廓表，跳过");
             }
         }
+        #[cfg(target_os = "android")]
+        platform::keep_locale_cjk(&mut db, locale);
         for path in platform::ui_weight_fonts()
             .into_iter()
             .chain(platform::emoji_fonts())
@@ -174,7 +180,7 @@ fn load(db: &mut Database, path: &Path) -> bool {
     }
 }
 
-/// 文件里至少有一张面带 swash 能栅格化的轮廓（`glyf` / `CFF `）。先放进一个临时字体库看（mmap，只解析表头），
+/// 文件里至少有一张面带 swash 能栅格化的轮廓（`glyf` / `CFF ` / `CFF2`，Fedora 默认的中文字体与 Android 的 Noto CJK 都是 CFF2 可变字体）。先放进一个临时字体库看（mmap，只解析表头），
 /// 正式的库里只加能画的：macOS 26 起的苹方把轮廓放进私有的 `hvgl` 表，swash 读不出字形，文字会画成空白，跳过它回退才会落到下一个字体。
 fn drawable(path: &Path) -> bool {
     let mut probe = Database::new();
@@ -190,7 +196,7 @@ fn has_outline_table(data: &[u8], index: u32) -> bool {
     let Ok(face) = ttf_parser::RawFace::parse(data, index) else {
         return false;
     };
-    [b"glyf", b"CFF "]
+    [b"glyf", b"CFF ", b"CFF2"]
         .into_iter()
         .any(|tag| face.table(ttf_parser::Tag::from_bytes(tag)).is_some())
 }

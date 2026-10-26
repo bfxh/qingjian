@@ -7,9 +7,11 @@ use qingjian_dictionary::{Dictionary, Match, SyllablePattern};
 
 use super::{
     Context, Conversion, LanguageModel, MAX_WORD_SYLLABLES, MIN_PARTIAL_LETTERS, Personal,
-    SearchLimits, SentenceWord, SpanCache, SpanWord, fallback_log_prob, transition_log_prob,
+    SECONDARY_PENALTY, SearchLimits, SentenceWord, SpanCache, SpanWord, TONE_PENALTY,
+    fallback_log_prob, reading_cost, transition_log_prob,
 };
 use crate::ranking::weight_bonus;
+use crate::zhuyin::tone;
 
 /// 词库里没有的孤立音节（罕见音节没有单字）按这个 log 概率兜底，让路径总能走通。
 const UNKNOWN_LOG_PROB: f64 = -30.0;
@@ -120,6 +122,7 @@ pub fn convert_with(
         personal,
         weight,
         cost,
+        &[],
         cache,
         limits,
     )
@@ -128,6 +131,7 @@ pub fn convert_with(
 }
 
 /// 得分最高的前 `k` 条路径（最多束宽条，按得分降序，文本相同的只留一条）：给重打分用。
+/// `tones` 是注音每个位置敲的声调（与 `positions` 对齐，可以更短；全拼 / 双拼给空），按 [`TONE_PENALTY`] 给格子选词打折、给路径扣分。
 /// `limits` 是搜索规模，见 [`SearchLimits`]。
 #[allow(clippy::too_many_arguments)]
 pub fn convert_paths(
@@ -139,6 +143,7 @@ pub fn convert_paths(
     personal: Personal<'_>,
     weight: impl Fn(&str) -> u32,
     cost: impl Fn(usize, &str) -> f64,
+    tones: &[Option<u8>],
     cache: &mut SpanCache,
     limits: SearchLimits,
 ) -> Vec<Conversion> {
@@ -192,8 +197,18 @@ pub fn convert_paths(
         let mut any = false;
         for end in start + 1..=n.min(start + MAX_WORD_SYLLABLES) {
             let span = &positions[start..end];
-            let hits = cache.get_or_insert_with(SpanCache::key(span), || {
-                span_candidates(dictionaries, span, start, personal, &weight, &cost, limits)
+            let span_tones = tones.get(start..end).unwrap_or(&[]);
+            let hits = cache.get_or_insert_with(SpanCache::toned_key(span, span_tones), || {
+                span_candidates(
+                    dictionaries,
+                    span,
+                    start,
+                    personal,
+                    &weight,
+                    &cost,
+                    span_tones,
+                    limits,
+                )
             });
             if hits.is_empty() {
                 continue;
@@ -201,7 +216,7 @@ pub fn convert_paths(
             any = true;
             for hit in hits.iter() {
                 let bonus = weight_bonus(weight(&hit.text));
-                let fallback = fallback_log_prob(hit.frequency, log_total);
+                let fallback = fallback_log_prob(hit.frequency, hit.secondary, log_total);
                 let (score, back) =
                     best_predecessor(&nodes, start, &hit.text, model, personal, fallback);
                 let previous = &nodes[start][back];
@@ -214,7 +229,7 @@ pub fn convert_paths(
                     start,
                     text: hit.text.clone(),
                     syllables: hit.syllables.clone(),
-                    score: score + bonus - hit.penalty,
+                    score: score + bonus - hit.penalty - hit.tone - hit.reading,
                     static_score,
                     back,
                     placeholder: false,
@@ -307,6 +322,7 @@ impl LanguageModel for NoModel {
 /// 个人次数只在这里保证用户常用的同音词进得了格子，不进路径打分（那是 n-gram 的事）；
 /// 打折让敲错变体命中的词只在原样命中不够多时才进格子，而常用词（关系）即使打折也留得住。
 /// 格子里有简拼位置时命中的是一大片不同读音的词，多留一些让语言模型去挑。
+#[allow(clippy::too_many_arguments)]
 fn span_candidates(
     dictionaries: &[&Dictionary],
     span: &[Vec<SyllablePattern<'_>>],
@@ -314,6 +330,7 @@ fn span_candidates(
     personal: Personal<'_>,
     weight: &impl Fn(&str) -> u32,
     cost: &impl Fn(usize, &str) -> f64,
+    tones: &[Option<u8>],
     limits: SearchLimits,
 ) -> Vec<SpanWord> {
     let alternatives = span.iter().any(|p| p.len() > 1);
@@ -328,7 +345,7 @@ fn span_candidates(
     };
     // 得分先算好再排：单字母简拼的格子能命中几千条，比较器里每次查两张表会让排序占掉十几毫秒
     // 词频 0 的生僻字不进词图，用户自己选过的除外：`keneng` 按 `ken eng` 切时有了 鞥 就会读出 肯鞥，压过敲错边读出的 可能
-    let mut scored: Vec<(f64, f64, Match<'_>)> = dictionaries
+    let mut scored: Vec<(f64, f64, f64, Match<'_>)> = dictionaries
         .iter()
         .flat_map(|d| d.lookup_exact_alt(span))
         .filter_map(|m| {
@@ -337,12 +354,17 @@ fn span_candidates(
                 return None;
             }
             let penalty = penalty_of(&m);
-            let score = f64::from(m.frequency.max(1)) * (1.0 + f64::from(seen)) * (-penalty).exp();
-            Some((score, penalty, m))
+            let tone = f64::from(tone::cost(m.text, m.syllables(), tones)) * TONE_PENALTY;
+            // 补充词库的片段多，不打折会把敲错边上的常用词（`zanen` 的 咱们）挤出格子
+            let secondary = if m.secondary { -SECONDARY_PENALTY } else { 0.0 };
+            let score = f64::from(m.frequency.max(1))
+                * (1.0 + f64::from(seen))
+                * (-(penalty + tone + secondary)).exp();
+            Some((score, penalty, tone, m))
         })
         .collect();
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    scored.dedup_by(|a, b| a.2.text == b.2.text);
+    scored.dedup_by(|a, b| a.3.text == b.3.text);
     let abbreviated = span.iter().any(|p| p.iter().any(|t| !t.complete));
     scored.truncate(if abbreviated {
         limits.abbreviated_span_candidates
@@ -351,11 +373,14 @@ fn span_candidates(
     });
     scored
         .into_iter()
-        .map(|(_, penalty, hit)| SpanWord {
+        .map(|(_, penalty, tone, hit)| SpanWord {
             text: hit.text.to_owned(),
             syllables: hit.syllables().map(str::to_owned).collect(),
             frequency: hit.frequency,
+            secondary: hit.secondary,
             penalty,
+            tone,
+            reading: reading_cost(&hit),
         })
         .collect()
 }
@@ -768,6 +793,7 @@ mod tests {
             Personal::NONE,
             |_| 0,
             |_, _| 0.0,
+            &[],
             &mut cache,
             narrow,
         );
@@ -791,6 +817,7 @@ mod tests {
                 Personal::NONE,
                 &|_| 0,
                 &|_, _| 0.0,
+                &[],
                 limits,
             )
             .len()
@@ -815,6 +842,7 @@ mod tests {
                 Personal::NONE,
                 &|_| 0,
                 &|_, _| 0.0,
+                &[],
                 limits,
             )
             .len()
