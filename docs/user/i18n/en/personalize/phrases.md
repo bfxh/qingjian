@@ -42,7 +42,7 @@ To move to another computer or keep a backup, click 导出… (Export…) in the
 
 - Imported phrases are added after your existing ones, keeping the weights and switches from the file; a phrase whose content already exists under the same input code is not added again, so importing the same file twice is harmless.
 - Plain text with one phrase per line as text, Tab, input code, Tab, weight (such as Rime's `custom_phrase.txt`) also works, for bringing phrases over from another input method; the weight is optional, and values outside 1–999 count as 1 or 999. This kind of text can't hold line breaks, so use the exported `.toml` for multi-line phrases.
-- The configuration file `config.toml` can't be imported here: settings and phrases are imported and exported separately, settings on the 高级 (Advanced) page; see [Moving to another computer](../advanced/data-files.md#moving-to-another-computer).
+- The configuration file `config.toml` can't be imported here: settings and phrases are imported and exported separately, settings on the 高级 (Advanced) page; see [Moving to another computer](../advanced/data-files.md#Moving-to-another-computer).
 - Entries written wrongly in the file are skipped; afterwards the row says how many were added, how many already existed and how many were wrong.
 
 The exported file uses the same `[[custom_phrases]]` format as the configuration file, so you can also edit it in a text editor.
