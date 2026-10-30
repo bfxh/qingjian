@@ -103,6 +103,21 @@ fn unattended_callers_keep_the_old_behaviour() {
     ));
 }
 
+/// 切走输入法的通知是 DLL 在 TSF 线程上**现连一条管道**发的，会话开在别的连接上。
+/// 按归属一刀切会把这条合法通知丢掉，状态条就永远收不起来——这条用例盯的就是这个回退。
+#[test]
+fn ime_switched_comes_from_a_temporary_connection() {
+    let mut router = router();
+    router.handle_from(1, open(FOREIGN, "Code.exe"));
+    let switched = ClientMessage::ImeSwitched { session: FOREIGN };
+    assert!(router.admits(2, &switched), "临时连接发的通知要放行");
+    // 同一条连接上别的消息照旧按归属判，门没被整条撬开
+    assert!(
+        !router.admits(2, &ClientMessage::Poll { session: FOREIGN }),
+        "别人的会话照样问不得"
+    );
+}
+
 #[test]
 fn a_closed_session_is_unregistered_again() {
     let mut router = router();

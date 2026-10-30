@@ -10,6 +10,7 @@
 use std::fs::File;
 use std::io;
 use std::os::windows::io::{AsRawHandle, FromRawHandle};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Instant;
@@ -33,6 +34,35 @@ use super::{Handled, Work};
 use crate::dispatch::Router;
 
 const BUFFER_SIZE: u32 = 64 * 1024;
+
+/// 同时在线的客户端连接上限。正常一个应用一条，几十条就算多了；上限只用来兜住「有人在刷连接」——
+/// 每条连接占一条线程加一个会话表条目，不封顶的话谁都能把 Server 的线程与内存用干净。
+///
+/// 挡的是资源耗尽，不是拒绝服务本身：把名额占满照样能让新应用连不上，那要鉴权之后按用户限速才能解决。
+const MAX_CONNECTIONS: usize = 256;
+
+/// 当前活着的连接数，连接线程退出时由 [`ConnectionSlot`] 还回去。
+static LIVE_CONNECTIONS: AtomicUsize = AtomicUsize::new(0);
+
+/// 一条连接的占位。拿到就说明没超上限，随连接线程一起结束、自动把名额还回来。
+struct ConnectionSlot;
+
+impl ConnectionSlot {
+    /// 先加再看：并发下可能多放进一两条，但绝不会漏减（漏减会让名额永久少一个，比多放更糟）。
+    fn acquire() -> Option<Self> {
+        if LIVE_CONNECTIONS.fetch_add(1, Ordering::Relaxed) >= MAX_CONNECTIONS {
+            LIVE_CONNECTIONS.fetch_sub(1, Ordering::Relaxed);
+            return None;
+        }
+        Some(Self)
+    }
+}
+
+impl Drop for ConnectionSlot {
+    fn drop(&mut self) {
+        LIVE_CONNECTIONS.fetch_sub(1, Ordering::Relaxed);
+    }
+}
 
 /// 在命名管道上服务多个客户端。当前线程独占 [`Router`] 跑工人循环，正常不返回。
 /// `work` 通道由调用方建（UI 线程也往里投状态条事件），这里拿一份发送端给各连接。
@@ -98,6 +128,9 @@ pub fn serve_pipe(
 }
 
 /// 先在建好的第一个实例上等客户端，之后每建一个实例、等一个客户端连上，就起一条线程服务它。建实例出错才停。
+///
+/// 线程数封在 [`MAX_CONNECTIONS`]：名额满了就把刚连上的这条直接关掉（对端读到断管），
+/// 不建实例、不进 [`Router`]。
 fn accept_loop(name: &HSTRING, first: File, sender: Sender<Work>) {
     let descriptor = pipe_security_descriptor();
     let mut instance = Ok(first);
@@ -109,8 +142,21 @@ fn accept_loop(name: &HSTRING, first: File, sender: Sender<Work>) {
                 break;
             }
         };
-        let sender = sender.clone();
-        thread::spawn(move || serve_connection(stream, sender));
+        match ConnectionSlot::acquire() {
+            Some(slot) => {
+                let sender = sender.clone();
+                thread::spawn(move || {
+                    // 名额跟着线程走：线程一结束（对端断开）就还回去
+                    let _slot = slot;
+                    serve_connection(stream, sender);
+                });
+            }
+            None => {
+                tracing::warn!(limit = MAX_CONNECTIONS, "连接数已达上限，断开新连接");
+                // 句柄随 `stream` 一起关掉，对端连不上
+                drop(stream);
+            }
+        }
         instance = create_instance(name, descriptor, false);
     }
 }
