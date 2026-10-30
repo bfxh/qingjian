@@ -207,7 +207,7 @@ const LINKS: &[(PageId, &str, &str, &str)] = &[
         PageId::Shortcuts,
         "shortcuts.extra_candidate_navigation",
         "personalize/keys-settings",
-        "额外候选导航键（macOS）",
+        "Emacs 风格候选键（macOS）",
     ),
     (
         PageId::Shortcuts,

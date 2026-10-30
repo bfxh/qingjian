@@ -167,7 +167,7 @@ impl Feature {
             Self::CommitKeys => "上屏键自定义",
             Self::ExtraPageKeys => "额外翻页键",
             Self::HighlightKeys => "高亮移动键",
-            Self::ExtraCandidateNavigation => "额外候选导航键",
+            Self::ExtraCandidateNavigation => "Emacs 风格候选键",
             Self::TogglePunctuation => "Ctrl + . 切换全半角标点",
             Self::ToggleTraditional => "Ctrl + Shift + F 切换简繁输出",
             Self::SystemTextReplacements => "也用系统的文本替换",
