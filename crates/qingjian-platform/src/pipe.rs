@@ -24,7 +24,8 @@ use windows::Win32::Security::Authorization::{
 };
 use windows::Win32::Security::{
     GetTokenInformation, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, RevertToSelf,
-    TOKEN_QUERY, TOKEN_USER, TokenIsAppContainer, TokenUser,
+    TOKEN_INFORMATION_CLASS, TOKEN_OWNER, TOKEN_QUERY, TOKEN_USER, TokenIsAppContainer, TokenOwner,
+    TokenUser,
 };
 use windows::Win32::System::Pipes::{GetNamedPipeServerProcessId, ImpersonateNamedPipeClient};
 use windows::Win32::System::Threading::{
@@ -52,13 +53,13 @@ const MAX_IMAGE_PATH: u32 = 32 * 1024;
 
 /// 客户端认出 Server 到哪一步。
 ///
-/// AppContainer 里的 DLL 打不开用户桌面上的进程（跨包的访问检查过不去），只能验到管道所有者，
+/// AppContainer 里的 DLL 打不开用户桌面上的进程（跨包的访问检查过不去），只能验管道所有者，
 /// 所以把「认出到哪一步」告诉调用方，好让它记进日志而不是静默降级。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PeerCheck {
     /// 映像路径与令牌用户都对上了。
     Image,
-    /// 只验到管道所有者是本用户。
+    /// 只验到管道所有者：本用户，或提升令牌下的 `BUILTIN\Administrators`（见 `owner_is_ours`）。
     Owner,
 }
 
@@ -103,16 +104,14 @@ pub fn verify_client(pipe: RawHandle) -> io::Result<()> {
 
 /// 验对端是不是「本用户下跑的 `expected_exe`」。
 ///
-/// 认两样，缺一不可：管道对象的所有者必须是本用户（这一条在 AppContainer 里也拿得到，因为句柄已经
-/// 握在手里了），服务端进程的映像路径必须就是 `expected_exe`（这一条只有桌面应用拿得到，见 [`PeerCheck`]）。
-/// 前一条挡住别的用户与 SYSTEM，后一条挡住同用户的冒名者——抢注的人不是本用户跑的那个 exe。
+/// 先认进程：服务端进程令牌里的用户 SID 必须与本进程一致，映像路径必须就是 `expected_exe`。
+/// 打不开服务端进程时只有 AppContainer 宿主退到「只验管道所有者」（见 [`PeerCheck`]），其余一律拒绝。
 ///
-/// 打不开服务端进程时只有 AppContainer 宿主退到「只验所有者」，其余一律拒绝。
+/// 所有者为什么不能只比用户 SID：提升的管理员令牌建内核对象时，所有者取自令牌的 `DefaultOwner`，
+/// 那是 `BUILTIN\Administrators`——只比用户 SID 会把管理员机器上的合法 Server 全判成冒名者。
+/// 所以退路那条走 `owner_is_ours`：用户 SID 或本进程令牌的默认所有者，认一个就行。
 pub fn verify_server(pipe: RawHandle, expected_exe: &Path) -> io::Result<PeerCheck> {
     let ours = current_user_sid()?;
-    let owner = owner_sid(HANDLE(pipe))?;
-    authorize(&owner, &ours, "管道所有者")?;
-
     let mut pid = 0u32;
     unsafe { GetNamedPipeServerProcessId(HANDLE(pipe), &mut pid) }?;
     let process = match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
@@ -122,6 +121,13 @@ pub fn verify_server(pipe: RawHandle, expected_exe: &Path) -> io::Result<PeerChe
         Err(error)
             if error.code() == HRESULT::from_win32(ERROR_ACCESS_DENIED.0) && in_app_container() =>
         {
+            let owner = owner_sid(HANDLE(pipe))?;
+            if !owner_is_ours(&owner, &ours)? {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("管道所有者 {owner} 与本进程的用户 {ours} 不符"),
+                ));
+            }
             return Ok(PeerCheck::Owner);
         }
         Err(error) => return Err(io::Error::other(error)),
@@ -142,6 +148,28 @@ pub fn verify_server(pipe: RawHandle, expected_exe: &Path) -> io::Result<PeerChe
             ),
         ))
     }
+}
+
+/// 管道所有者算不算「我们自己」。
+///
+/// 用户 SID 只是其中一种答案：提升的管理员令牌建对象时所有者是 `BUILTIN\Administrators`
+/// （令牌的 `DefaultOwner`），普通与 AppContainer 令牌才是用户 SID。两边都认，否则管理员机器上
+/// 「所有者是本用户」这条会是恒假——CI 的 Windows runner 正好是提升的，第一版就是这么红的。
+fn owner_is_ours(owner: &str, ours: &str) -> io::Result<bool> {
+    if owner.eq_ignore_ascii_case(ours) {
+        return Ok(true);
+    }
+    Ok(owner.eq_ignore_ascii_case(&default_owner_sid()?))
+}
+
+/// 本进程令牌的默认所有者（`TokenOwner`）。
+fn default_owner_sid() -> io::Result<String> {
+    let mut token = HANDLE::default();
+    unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) }?;
+    let _token = Handle(token);
+    let buffer = token_info(token, TokenOwner)?;
+    let owner = unsafe { buffer.as_ptr().cast::<TOKEN_OWNER>().read_unaligned() };
+    sid_to_string(owner.Owner)
 }
 
 /// 对端必须是本用户。比字符串：两边的 SID 都出自 `ConvertSidToStringSidW`，写法一致。
@@ -205,11 +233,19 @@ fn user_sid_of_process(process: HANDLE) -> io::Result<String> {
     user_sid_of_token(token)
 }
 
-/// 令牌里的用户 SID。两段式：先问长度（必定报缓冲区不够，不算失败），再取内容。
+/// 令牌里的用户 SID。
 fn user_sid_of_token(token: HANDLE) -> io::Result<String> {
+    let buffer = token_info(token, TokenUser)?;
+    // 缓冲区开头就是 `TOKEN_USER`，`User.Sid` 指向同一块内存里的 SID
+    let user = unsafe { buffer.as_ptr().cast::<TOKEN_USER>().read_unaligned() };
+    sid_to_string(user.User.Sid)
+}
+
+/// 两段式取令牌信息：先问长度（必定报缓冲区不够，不算失败），再取内容。
+fn token_info(token: HANDLE, class: TOKEN_INFORMATION_CLASS) -> io::Result<Vec<u8>> {
     let mut needed = 0u32;
     unsafe {
-        let _ = GetTokenInformation(token, TokenUser, None, 0, &mut needed);
+        let _ = GetTokenInformation(token, class, None, 0, &mut needed);
     }
     if needed == 0 {
         return Err(io::Error::last_os_error());
@@ -218,15 +254,13 @@ fn user_sid_of_token(token: HANDLE) -> io::Result<String> {
     unsafe {
         GetTokenInformation(
             token,
-            TokenUser,
+            class,
             Some(buffer.as_mut_ptr().cast()),
             needed,
             &mut needed,
         )?;
     }
-    // 缓冲区开头就是 `TOKEN_USER`，`User.Sid` 指向同一块内存里的 SID
-    let user = unsafe { buffer.as_ptr().cast::<TOKEN_USER>().read_unaligned() };
-    sid_to_string(user.User.Sid)
+    Ok(buffer)
 }
 
 /// 管道对象所有者的 SID（缺省是建它的进程的用户）。
@@ -350,7 +384,10 @@ mod tests {
     };
     use windows::core::{HRESULT, HSTRING};
 
-    use super::{PeerCheck, SDDL, current_user_sid, name, verify_client, verify_server};
+    use super::{
+        PeerCheck, SDDL, current_user_sid, name, owner_is_ours, owner_sid, verify_client,
+        verify_server,
+    };
 
     #[test]
     fn pipe_name_stays_inside_the_pipe_namespace() {
@@ -393,6 +430,26 @@ mod tests {
         assert_eq!(
             verify_server(server.as_raw_handle(), &exe).expect("本进程就是服务端"),
             PeerCheck::Image
+        );
+    }
+
+    /// 自己建的管道，所有者必须被 [`owner_is_ours`] 认下来。
+    ///
+    /// 提升的管理员令牌（CI 的 windows runner 就是）建对象时所有者是 `BUILTIN\Administrators`，
+    /// 只比用户 SID 的版本会在这里判成「不是本用户」——管理员机器上的输入法因此完全连不上。
+    #[test]
+    fn the_pipe_owner_is_recognised_on_an_elevated_token() {
+        let server = pipe_pair();
+        let ours = current_user_sid().expect("读得到本进程的 SID");
+        let owner = owner_sid(HANDLE(server.as_raw_handle())).expect("读得到管道所有者");
+        assert!(
+            owner_is_ours(&owner, &ours).expect("读得到令牌的默认所有者"),
+            "自己建的管道认不出所有者：{owner}（本进程用户 {ours}）"
+        );
+        // 别的身份照样要拒，门没被整条撬开
+        assert!(
+            !owner_is_ours("S-1-5-18", &ours).expect("读得到令牌的默认所有者"),
+            "SYSTEM 不该被当成我们自己"
         );
     }
 
