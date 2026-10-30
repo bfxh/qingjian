@@ -272,7 +272,7 @@ impl Router {
         self.handle_from(UNATTENDED, message)
     }
 
-    /// 处理某条连接上收到的消息：会话属于别的连接时丢弃（见 [`admits`](Self::admits)），不回话。
+    /// 处理某条连接上收到的消息：会话属于别的连接时丢弃（怎么判见 `admits`），不回话。
     /// 到点顺带把学习数据落盘。
     pub fn handle_from(
         &mut self,

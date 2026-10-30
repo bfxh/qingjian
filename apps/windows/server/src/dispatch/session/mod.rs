@@ -21,7 +21,7 @@ impl Router {
     /// - 会话已注册：只有 `OpenSession` 的那条连接能动它；
     /// - 会话没注册：只放行 [`ClientMessage::allowed_before_open`] 那几条。
     ///
-    /// 不认的消息在 [`traced_from`](Router::traced_from) 里丢掉、不回话——合法的 DLL 永远走不到这里。
+    /// 不认的消息在 `traced_from` 里丢掉、不回话——合法的 DLL 永远走不到这里。
     pub(super) fn admits(&self, conn: ConnectionId, message: &ClientMessage) -> bool {
         if conn == UNATTENDED {
             return true;
