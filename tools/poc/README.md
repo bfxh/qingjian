@@ -1,6 +1,10 @@
 # 命名管道 PoC
 
-复现 0.3.2 Windows 端 IPC 信任边界上的两个问题。都在**普通用户权限**下可跑，不需要管理员。
+复现 Windows 端 IPC 信任边界上的两个问题。都在**普通用户权限**下可跑，不需要管理员。
+
+管道名：0.3.3 起按当前用户的 SID 派生（`\\.\pipe\qingjian-<12 位摘要>`，见
+`crates/qingjian-platform/src/pipe.rs`），两个脚本会自动算（`pipe_name.py`，算法与 Rust 侧一致）；
+0.3.2 及更早是固定的 `\\.\pipe\qingjian`，用 `--pipe` 指回去。
 
 ## `pipe-crosstalk.py`：会话号可猜，别人的组句能读到
 
@@ -37,8 +41,13 @@ python tools/poc/pipe-squat.py --hold 30 # 占着 30 秒，这段时间真 Serve
 抢注之后拿到的 `OpenSession` / `Key` / `Surrounding` 都是明文、无任何鉴别，回包还能让任意文本落进
 任意 TSF 应用。脚本只读不写：收到消息就打印，不构造回包，读完释放名字，避免把用户的应用卡在 `open()`。
 
+修好之后：DLL 连上先认对端（`GetNamedPipeServerProcessId` + 打开进程比对映像路径与令牌用户），
+认不出来就当连不上——`Key` / `Surrounding` 一条都不会发。脚本这头看到的是「连上了、客户端立刻断开」；
+抢注能造成的只剩 DoS（真 Server 抢不到名字），不再有按键外泄。
+
 ## 相关代码
 
+- 管道名与两端身份校验：`crates/qingjian-platform/src/pipe.rs`
 - 管道与 DACL：`apps/windows/server/src/ipc/pipe.rs`
 - 会话分发：`apps/windows/server/src/dispatch/`、`crates/qingjian-platform/src/protocol/client.rs`
 - DLL 侧连接：`apps/windows/tsf/src/client/pipe.rs`、`apps/windows/tsf/src/com/mod.rs`

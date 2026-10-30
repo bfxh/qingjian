@@ -1,8 +1,11 @@
-//! 命名管道传输：在 `\\.\pipe\qingjian` 上服务 DLL 客户端，字节模式，帧由协议 codec 切。
+//! 命名管道传输：在 `\\.\pipe\qingjian-<用户摘要>` 上服务 DLL 客户端，字节模式，帧由协议 codec 切。
 //!
 //! 每个应用进程各开一条连接且失焦后连接仍在，所以不能串行服务（新聚焦的应用连不上会阻塞 UI 线程、
 //! 触发 TSF 看门狗）：后台接受循环每来一个客户端就新建实例、起一条线程；[`Router`] 不跨线程，
 //! 留在调用线程跑工人循环，各连接经通道把消息转给它串行处理。
+//!
+//! 管道名在全局命名空间里，谁都能抢建同名实例，所以每条连接在读进第一帧之后先过 [`verify_client`]：
+//! 不是本用户的直接断开，那一帧也不处理、不回话。
 
 use std::fs::File;
 use std::io;
@@ -23,23 +26,21 @@ use windows::Win32::System::Pipes::{
 };
 use windows::core::{HRESULT, HSTRING};
 
+use qingjian_platform::pipe::verify_client;
 use qingjian_platform::protocol::{ClientMessage, ServerMessage};
 
 use super::{Handled, Work};
 use crate::dispatch::Router;
 
-pub use qingjian_platform::protocol::DEFAULT_PIPE_NAME;
-
 const BUFFER_SIZE: u32 = 64 * 1024;
-
-/// 管道的 SDDL：放行 Everyone / ALL APPLICATION PACKAGES / ALL RESTRICTED APPLICATION PACKAGES，
-/// 完整性标 Low。任务栏搜索、设置这类 AppContainer 进程在默认 DACL 下连不上。
-const PIPE_SDDL: &str = "D:(A;;GA;;;WD)(A;;GA;;;AC)(A;;GA;;;S-1-15-2-2)S:(ML;;NW;;;LW)";
 
 /// 在命名管道上服务多个客户端。当前线程独占 [`Router`] 跑工人循环，正常不返回。
 /// `work` 通道由调用方建（UI 线程也往里投状态条事件），这里拿一份发送端给各连接。
-/// 第一个实例带 `FILE_FLAG_FIRST_PIPE_INSTANCE`：已有一个 Server 在跑就建不出来，直接报错退出（两个 Server
-/// 会各画一条状态条、各持一份状态）。
+///
+/// `name` 由调用方按当前用户派生（[`qingjian_platform::pipe::current_name`]），一个用户一条，
+/// 快速切换用户时各人的 Server 不会互抢。第一个实例带 `FILE_FLAG_FIRST_PIPE_INSTANCE`：名字已被占
+/// （同一个用户的另一个 Server，或抢注者）就建不出来，直接报错退出——两个 Server 会各画一条状态条、
+/// 各持一份状态。
 pub fn serve_pipe(
     name: &str,
     router: &mut Router,
@@ -50,9 +51,9 @@ pub fn serve_pipe(
     let first = match create_instance(&pipe, pipe_security_descriptor(), true) {
         Ok(first) => first,
         Err(error) if error.raw_os_error() == Some(ERROR_ACCESS_DENIED.0 as i32) => {
-            return Err(io::Error::other(
-                "已有一个 qingjian-server 在运行（命名管道被占），本进程退出",
-            ));
+            return Err(io::Error::other(format!(
+                "命名管道 {name} 已被占用（另一个 qingjian-server 或抢占者），本进程退出"
+            )));
         }
         Err(error) => return Err(error),
     };
@@ -119,7 +120,7 @@ fn pipe_security_descriptor() -> PSECURITY_DESCRIPTOR {
     let mut descriptor = PSECURITY_DESCRIPTOR::default();
     let converted = unsafe {
         ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            &HSTRING::from(PIPE_SDDL),
+            &HSTRING::from(qingjian_platform::pipe::SDDL),
             SDDL_REVISION_1,
             &mut descriptor,
             None,
@@ -187,10 +188,22 @@ fn serve_connection(mut stream: File, sender: Sender<Work>) {
     let mut opened = Vec::new();
     // 这条连接的身份：会话归属按它判（见 `Router::admits`），别处猜得到会话号也动不了。
     let conn = super::next_connection();
+    // 验身份卡在第一条消息上：`ImpersonateNamedPipeClient` 要等管道上有数据被读过才能用，只能
+    // 「收下第一帧 → 验 → 再处理」。原始句柄是裸指针，拷一份带进闭包，不借用 `stream`。
+    let handle = stream.as_raw_handle();
+    let mut verified = false;
     let outcome = super::pump(
         &mut stream,
         conn,
         |conn, message| {
+            if !verified {
+                verified = true;
+                if let Err(error) = verify_client(handle) {
+                    // 不回话：对面不是本用户，连它发来的第一帧都不处理
+                    tracing::warn!(%error, "命名管道客户端的用户与本进程不同，断开");
+                    return Handled::Stop;
+                }
+            }
             if sender
                 .send(Work::Client(conn, message, reply_sender.clone()))
                 .is_err()

