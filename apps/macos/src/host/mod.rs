@@ -211,6 +211,9 @@ pub struct Host {
     /// 候选高亮由哪对方向键移动（配置 `[shortcut] highlight_keys`）。
     pub highlight_keys: HighlightKeys,
 
+    /// 组句中额外使用 Ctrl + F / B / N / P / A / E 导航候选。
+    pub extra_candidate_navigation: bool,
+
     /// 英文模式是否给英文候选（配置 `[general] english_candidates`）。
     pub english_candidates: bool,
 

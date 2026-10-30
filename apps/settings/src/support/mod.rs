@@ -36,6 +36,7 @@ pub enum Feature {
     CommitKeys,
     ExtraPageKeys,
     HighlightKeys,
+    ExtraCandidateNavigation,
     TogglePunctuation,
     /// 简体与上次用的繁体之间切换输出字形。
     ToggleTraditional,
@@ -60,7 +61,7 @@ pub enum Feature {
 
 impl Feature {
     #[cfg(test)]
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 27] = [
         Self::AuxCode,
         Self::Schemes,
         Self::SwitchKeys,
@@ -76,6 +77,7 @@ impl Feature {
         Self::CommitKeys,
         Self::ExtraPageKeys,
         Self::HighlightKeys,
+        Self::ExtraCandidateNavigation,
         Self::TogglePunctuation,
         Self::ToggleTraditional,
         Self::SystemTextReplacements,
@@ -127,6 +129,7 @@ impl Feature {
             Self::CommitKeys => [Todo, Yes, Yes],
             Self::ExtraPageKeys => [Yes, Yes, Todo],
             Self::HighlightKeys => [Yes, Yes, Todo],
+            Self::ExtraCandidateNavigation => [Yes, Todo, Todo],
             Self::TogglePunctuation => [Yes, Yes, Todo],
             Self::ToggleTraditional => [Todo, Yes, Todo],
             // 系统的文本替换只有 macOS 有
@@ -164,6 +167,7 @@ impl Feature {
             Self::CommitKeys => "上屏键自定义",
             Self::ExtraPageKeys => "额外翻页键",
             Self::HighlightKeys => "高亮移动键",
+            Self::ExtraCandidateNavigation => "额外候选导航键",
             Self::TogglePunctuation => "Ctrl + . 切换全半角标点",
             Self::ToggleTraditional => "Ctrl + Shift + F 切换简繁输出",
             Self::SystemTextReplacements => "也用系统的文本替换",
@@ -198,6 +202,9 @@ impl Feature {
                 (PageId::Shortcuts, "shortcut.commit_raw"),
             ],
             Self::HighlightKeys => &[(PageId::Shortcuts, "shortcuts.highlight_keys")],
+            Self::ExtraCandidateNavigation => {
+                &[(PageId::Shortcuts, "shortcuts.extra_candidate_navigation")]
+            }
             Self::TogglePunctuation => &[(PageId::Shortcuts, "shortcuts.punctuation_width")],
             Self::ToggleTraditional => &[(PageId::Shortcuts, "shortcuts.traditional")],
             Self::SystemTextReplacements => &[(PageId::Phrases, "phrases.system_replacements")],

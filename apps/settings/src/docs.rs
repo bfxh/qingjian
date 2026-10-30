@@ -205,6 +205,12 @@ const LINKS: &[(PageId, &str, &str, &str)] = &[
     ),
     (
         PageId::Shortcuts,
+        "shortcuts.extra_candidate_navigation",
+        "personalize/keys-settings",
+        "额外候选导航键（macOS）",
+    ),
+    (
+        PageId::Shortcuts,
         "shortcuts.punctuation_width",
         "personalize/keys-settings",
         "全半角标点快捷键（macOS、Windows）",

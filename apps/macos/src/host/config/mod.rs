@@ -80,6 +80,7 @@ impl Host {
         self.page_keys = config.general.page_keys();
         self.extra_page_keys = config.shortcut.extra_page_keys;
         self.highlight_keys = config.shortcut.highlight_keys;
+        self.extra_candidate_navigation = config.shortcut.extra_candidate_navigation;
         self.punct_commits = config.general.punct_commits;
         self.preedit_mode = config.general.preedit;
         self.translation_pos = config.general.translation_pos;

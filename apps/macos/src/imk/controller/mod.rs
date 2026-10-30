@@ -23,6 +23,7 @@ mod click;
 mod command;
 mod commit;
 mod display;
+mod navigation;
 mod panel;
 mod text;
 mod trace;
@@ -245,7 +246,7 @@ impl QingjianInputController {
         }
     }
 
-    /// 一个按键事件的分发：只管按下；Cmd / Ctrl 组合除 Cmd+左右外一律交给应用；命令键映射成选择器；其余按字符当文本。
+    /// 一个按键事件的分发：只管按下；配置的组合键先处理，其他 Cmd / Ctrl 组合交给应用；命令键映射成选择器。
     fn dispatch_event(&self, event: &NSEvent, client: TextClient<'_>) -> bool {
         // 修饰键事件（`recognizedEvents:` 声明了 flagsChanged 才有）：Shift 的按下 / 抬起在这里，
         // 是精确边沿。事件本身继续照常交给系统，不吞。
@@ -359,6 +360,37 @@ impl QingjianInputController {
                 tracing::info!(digit, sense = 1, "译词快捷键命中");
                 return self.handle_translation_key(digit, 1, client);
             }
+        }
+        let navigation = host::with(|h| {
+            navigation::shortcut(
+                h.extra_candidate_navigation,
+                composing,
+                (0..h.session.layout.len())
+                    .any(|index| h.session.layout.candidate(index).is_some()),
+                h.layout,
+                pressed,
+                typed.as_deref().and_then(|t| t.chars().next()),
+            )
+        })
+        .flatten();
+        if let Some(navigation) = navigation {
+            match navigation {
+                navigation::Navigation::Candidate(delta) => self.navigate_candidate(delta, client),
+                navigation::Navigation::PageEdge(last) => self.navigate_page_edge(last, client),
+                navigation::Navigation::Page(delta) => {
+                    let focus_changed = host::with(|h| {
+                        let changed = h.session.focus != Focus::Candidates;
+                        h.session.focus = Focus::Candidates;
+                        changed
+                    })
+                    .unwrap_or(false);
+                    self.turn_page(delta, client);
+                    if focus_changed {
+                        self.render(client);
+                    }
+                }
+            }
+            return true;
         }
         let selector = match key {
             36 | 76 => Some(sel!(insertNewline:)),

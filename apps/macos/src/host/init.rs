@@ -183,6 +183,7 @@ pub fn init(mtm: MainThreadMarker, info: &BundleInfo) -> Result<(), HostError> {
             horizontal_grid: false,
             grid_page_keys: false,
             highlight_keys: HighlightKeys::default(),
+            extra_candidate_navigation: false,
             english_candidates: true,
             text_replacements: Vec::new(),
             apps: AppsConfig::default(),

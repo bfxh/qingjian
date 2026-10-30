@@ -22,6 +22,9 @@ pub struct ShortcutConfig {
     /// 候选高亮由 `↑` / `↓` 还是 `←` / `→` 移动（Windows 用）。详见 [`HighlightKeys`]。
     pub highlight_keys: HighlightKeys,
 
+    /// 候选中额外启用 Ctrl + F / B / N / P / A / E 导航（macOS）。
+    pub extra_candidate_navigation: bool,
+
     /// 切换当前中英模式的全 / 半角标点（macOS 只切中文模式的），空串禁用，例如 `ctrl+.`。
     #[serde(with = "super::optional_key_combo")]
     pub toggle_punctuation: Option<KeyCombo>,
@@ -75,6 +78,7 @@ impl Default for ShortcutConfig {
             mode: ModeKeys::default(),
             switch_mode: SwitchKeys::default(),
             highlight_keys: HighlightKeys::UpDown,
+            extra_candidate_navigation: false,
             toggle_punctuation: None,
             extra_page_keys: PageKeys::default(),
             translation,
@@ -193,6 +197,21 @@ mod tests {
         assert_eq!(off.switch_mode, crate::SwitchKeys::NONE);
         let missing: ShortcutConfig = toml::from_str("").unwrap();
         assert_eq!(missing.switch_mode, SwitchKeys::default());
+    }
+
+    #[test]
+    fn extra_candidate_navigation_defaults_and_round_trips() {
+        let old: ShortcutConfig = toml::from_str("expression = 'i'").unwrap();
+        assert!(!old.extra_candidate_navigation);
+        for enabled in [false, true] {
+            let config: ShortcutConfig =
+                toml::from_str(&format!("extra_candidate_navigation = {enabled}")).unwrap();
+            assert_eq!(config.extra_candidate_navigation, enabled);
+            let restored: ShortcutConfig =
+                toml::from_str(&toml::to_string(&config).unwrap()).unwrap();
+            assert_eq!(restored.extra_candidate_navigation, enabled);
+        }
+        assert!(toml::from_str::<ShortcutConfig>("extra_candidate_navigation = 'yes'").is_err());
     }
 
     #[test]

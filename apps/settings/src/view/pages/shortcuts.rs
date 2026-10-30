@@ -191,6 +191,21 @@ fn extra_keys(
                 .build(ui, theme)?,
         );
     }
+    if Feature::ExtraCandidateNavigation.here() {
+        let enabled = shortcut.extra_candidate_navigation;
+        let checkbox = Checkbox::new(enabled, "Ctrl + F/B/N/P/A/E").build(
+            ui,
+            theme,
+            "extra-candidate-navigation",
+            Message::set("shortcut", "extra_candidate_navigation", !enabled),
+        )?;
+        rows.push(
+            SettingRow::new(tr("shortcuts.extra_candidate_navigation"))
+                .info(tr("shortcuts.extra_candidate_navigation_info"))
+                .control(checkbox)
+                .build(ui, theme)?,
+        );
+    }
     if Feature::TogglePunctuation.here() {
         let punctuation = shortcut.toggle_punctuation.is_some();
         let switch = bamboo_slip::Switch::new(punctuation).build(

@@ -157,6 +157,7 @@
   - [ ] 上屏键自定义：macOS
   - [ ] 额外翻页键：Linux
   - [ ] 高亮移动键：Linux
+  - [ ] 额外候选导航键：Windows、Linux
   - [ ] Ctrl + . 切换全半角标点：Linux
   - [ ] Ctrl + Shift + F 切换简繁输出：macOS、Linux
   - [ ] 双拼键位提示：Linux

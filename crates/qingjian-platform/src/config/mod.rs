@@ -367,6 +367,8 @@ question_mark = false
 # 候选高亮由哪对方向键移动：updown 用 ↑ / ↓ 移高亮、← / → 移拼音光标（缺省）；leftright 改用 ← / → 移高亮
 # leftright 时两键把「拼音行 + 候选栏」当成一条从左到右的序列走：→ 到拼音光标末位溢出成选词，← 到候选首位回拼音光标；↑ / ↓ 不做事。只有 Windows 用
 highlight_keys = "updown"
+# 额外用 Ctrl + F/B/N/P/A/E 导航候选（macOS）：竖排 P/N 移候选、B/F 翻页，横排相反；A/E 跳到当前页首个/最后一个真实候选，跳过空位；默认关
+extra_candidate_navigation = false
 # 组句时上屏高亮候选的键与原样上屏敲的字母的键：space / enter，都可写成 shift+space、shift+enter，或一个符号键如 ";"
 # 不能用 Ctrl / Alt / Win 组合、字母数字、翻页键；两项不能相同。空格或回车让出去后又没配给另一项，组句时按它不做事。Windows、Linux 用
 commit_candidate = "space"

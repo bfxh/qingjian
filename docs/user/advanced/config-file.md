@@ -49,6 +49,7 @@ description: 青简的全部设置保存在一个文本配置文件里：位置�
 | `[general] preedit` | 外观 → 拼音显示位置 | `both`、`inline`、`window` |
 | `[general] page_keys` | 快捷键 → 翻页键 | `"[]"`、`",."`、`"-="` |
 | `[shortcut] extra_page_keys` | 快捷键 → 额外翻页键 | 列表，如 `["[]", ",.", "-="]`，缺省为空 |
+| `[shortcut] extra_candidate_navigation` | 快捷键 → 额外候选导航键（macOS） | `false`（默认）或 `true` |
 | `[shortcut] highlight_keys` | 快捷键 → 高亮移动键 | 上下或左右 |
 | `[shortcut] toggle_punctuation` | 快捷键 → Ctrl + . 切换全半角标点 | 空串为关闭，`"ctrl+."` 为 Ctrl + 句号；也可写成修饰键加字母、数字或句号，如 `"ctrl+shift+."` |
 | `[shortcut] toggle_traditional` | 快捷键 → Ctrl + Shift + F 切换简繁输出 | 空串为关闭（缺省），`"ctrl+shift+f"` 为 Ctrl + Shift + F；也可写成修饰键加字母或数字。只有 Windows 用 |

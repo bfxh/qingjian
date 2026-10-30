@@ -1,6 +1,9 @@
 //! 查询与呈现：刷新候选、画候选窗、整句补全、翻页与高亮。
 
-use super::*;
+use super::{
+    Candidate, Focus, Preedit, QingjianInputController, RESCORE_LOOKBACK, TextClient, host,
+    secure_input,
+};
 use qingjian_core::candidate::arrows::{self, Arrow, ArrowAction};
 use qingjian_platform::HighlightKeys;
 
@@ -230,6 +233,38 @@ impl QingjianInputController {
             } else {
                 false
             }
+        })
+        .unwrap_or(false);
+        if changed {
+            self.render(client);
+        }
+    }
+
+    /// 额外导航键直接在候选间移动，不受方向键配置或拼音光标位置影响。
+    pub(super) fn navigate_candidate(&self, delta: isize, client: TextClient<'_>) {
+        let changed = host::with(|h| {
+            let focus_changed = h.session.focus != Focus::Candidates;
+            h.session.focus = Focus::Candidates;
+            let moved = if h.session.grid.is_some() {
+                h.session.move_cells(delta)
+            } else {
+                h.session.move_highlight(delta)
+            };
+            focus_changed || moved
+        })
+        .unwrap_or(false);
+        if changed {
+            self.render(client);
+        }
+    }
+
+    /// 额外导航键跳到当前页的首个或末个候选。
+    pub(super) fn navigate_page_edge(&self, last: bool, client: TextClient<'_>) {
+        let changed = host::with(|h| {
+            let focus_changed = h.session.focus != Focus::Candidates;
+            h.session.focus = Focus::Candidates;
+            let moved = h.session.move_to_page_edge(last);
+            focus_changed || moved
         })
         .unwrap_or(false);
         if changed {
