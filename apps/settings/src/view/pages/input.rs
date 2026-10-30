@@ -66,6 +66,15 @@ pub fn input(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderErr
                 false,
             )?);
         }
+        rows.push(toggle_info(
+            ui,
+            page,
+            tr("input.full_pinyin"),
+            Some(tr("input.full_pinyin_info")),
+            ("general", "shuangpin_full_pinyin"),
+            general.shuangpin_full_pinyin,
+            false,
+        )?);
     }
     rows.push(toggle_info(
         ui,

@@ -140,6 +140,11 @@ impl Scheme {
     pub fn decode(self, keys: &str) -> Decoded {
         self.layout().decode(keys)
     }
+
+    /// 见 [`Layout::decode_mixed`]。
+    pub fn decode_mixed(self, keys: &str, fuzzy: crate::fuzzy::FuzzyRules) -> Vec<Decoded> {
+        self.layout().decode_mixed(keys, fuzzy)
+    }
 }
 
 /// 内置九套的键位，与 [`Scheme::ALL`] 同序。

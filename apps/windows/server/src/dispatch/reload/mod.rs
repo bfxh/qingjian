@@ -263,6 +263,8 @@ impl Router {
         self.engine
             .set_shuangpin_raw_window(config.general.shuangpin_raw_window);
         self.engine
+            .set_shuangpin_full_pinyin(config.general.shuangpin_full_pinyin);
+        self.engine
             .set_hold_selections(config.general.hold_selections);
         self.engine
             .set_context_memory(config.model.context_memory_seconds);

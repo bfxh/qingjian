@@ -167,6 +167,10 @@ pub struct GeneralConfig {
     /// 双拼方案下候选窗口的拼音行显示原始按键还是全拼，与 `shuangpin_raw_preedit` 各管各的，两项组合出四种显示。缺省关（全拼）。
     pub shuangpin_raw_window: bool,
 
+    /// 双拼方案下同时接受全拼（同一段输入里两种打法也能混用）。缺省关：只用选定的双拼方案。
+    /// 开着时家里有人打双拼、有人打全拼可以共用一份设置。
+    pub shuangpin_full_pinyin: bool,
+
     /// 一段拼音分几次选完时，先选的词留在输入框里、整段选完才一起上屏，退格先撤回选择。缺省开；关掉是选了就上屏。
     pub hold_selections: bool,
 
@@ -274,6 +278,7 @@ impl Default for GeneralConfig {
             scheme: String::new(),
             shuangpin_raw_preedit: false,
             shuangpin_raw_window: false,
+            shuangpin_full_pinyin: false,
             hold_selections: true,
             key_hint: KeyHintMode::default(),
             key_hint_opacity: DEFAULT_KEY_HINT_OPACITY,

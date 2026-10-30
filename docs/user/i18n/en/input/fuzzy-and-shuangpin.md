@@ -33,11 +33,13 @@ Words matching what you actually typed still come first, followed by fuzzy match
 
 Nine schemes: Xiaohe, Ziranma, Microsoft, Sogou, Zhineng ABC, Xiaolang, Shoudao, Pinyin Jiajia, Ziguang.
 
-- By default both the app's input box and the pinyin line in the candidate window show the decoded full pinyin (`nihc` → `ni'hao`). 设置 → 输入 (Settings → Input) has two switches, one for each: with 输入框显示按键 (Show keys in the input box) on, the app's input box shows the keys you typed (`kdfa`); with 候选窗显示按键 (Show keys in the candidate window) on, the pinyin line in the candidate window shows the keys you typed. Turn both on to show keys in both places. 候选窗显示按键 is available on macOS and Windows.
+- By default both the app's input box and the pinyin line in the candidate window show the decoded full pinyin (`nihc` → `ni'hao`). 设置 → 输入 (Settings → Input) has two switches, one for each: with 输入框显示按键 (Show keys in the input box) on, the app's input box shows the keys you typed (`kdfa`); with 候选窗显示按键 (Show keys in the candidate window) on, the pinyin line in the candidate window shows the keys you typed. Turn both on to show keys in both places. 候选窗显示按键 is available on macOS and Windows. Typing habits are recorded by the decoded full pinyin.
 - Double pinyin supports fuzzy pinyin too. With s/sh on, `sd` in Ziranma / Microsoft / Sogou and `sl` in Xiaohe find 双.
 - When the whole input can't form a single complete syllable, it's read again as initials, one per key: Pinyin Jiajia `im` → 什么, `zm` → 怎么. Input that decodes normally is unaffected, and complete double pinyin codes still work as before.
 - Spelling mistakes aren't corrected in double pinyin.
 - In double pinyin, v / u / i are all syllable keys, so calculations and asking about characters start with `Shift + V` and `Shift + U` instead; see [Dates, calculations and special characters](shortcuts.md#Changing-the-prefix-letters).
+
+**Full pinyin too** (off by default): when turned on under 设置 → 输入 (Settings → Input), full pinyin works alongside the double pinyin scheme, and both styles can be mixed within one input. It suits a computer shared by double pinyin and full pinyin typists: both `nihao` and `nihc` give 你好, and `kaifh` (full pinyin first, double pinyin second) gives 开发. When both readings cover the whole input, their sentence scores decide the order rather than always putting the double pinyin reading first; with the switch off, only the chosen scheme is read.
 
 How the schemes differ:
 

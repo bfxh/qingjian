@@ -1,6 +1,5 @@
 //! 上屏：译词标注、按候选消耗缓冲区、对齐音节、学习与撤销、自动造词。
 
-use super::alignment::Alignment;
 use super::annotation::AnnotationReport;
 use super::input_log::{InputLogEntry, InputLogger, InputSource};
 use super::learning::Learner;
@@ -10,11 +9,11 @@ use super::{
     EXPLICIT_TRANSITION_WEIGHT, Engine, choice_key, reading_key, segment_longest_prefix,
 };
 use crate::candidate::{Candidate, CandidateKind, CandidateList, Language};
-use crate::correction::typo;
 use crate::{parser, sentence};
 use qingjian_dictionary::Dictionary;
 use std::time::Instant;
 
+mod align;
 mod chain;
 mod last;
 mod transition;
@@ -484,12 +483,24 @@ impl Engine {
         {
             return Some(words);
         }
-        let conversion = match (self.decode(scope), self.active_correction(scope)) {
-            (Some(decoded), _) => {
-                self.convert_sentence(&decoded.segmentation()?.patterns(), true)?
+        // 混输：候选的文本可能来自任意一条读法的整句转换，逐条对上就取那条的词序列
+        let readings = self.decode_readings(scope);
+        if !readings.is_empty() {
+            for decoded in &readings {
+                let Some(segmentation) = decoded.segmentation() else {
+                    continue;
+                };
+                if let Some(conversion) = self.convert_sentence(&segmentation.patterns(), true)
+                    && conversion.text == candidate.text
+                {
+                    return Some(conversion.words);
+                }
             }
-            (None, Some(c)) => self.convert_sentence(&c.segmentation.patterns(), false)?,
-            (None, None) => {
+            return None;
+        }
+        let conversion = match self.active_correction(scope) {
+            Some(c) => self.convert_sentence(&c.segmentation.patterns(), false)?,
+            None => {
                 let (segmentations, _) = segment_longest_prefix(scope).ok()?;
                 self.convert_sentence(&segmentations.first()?.patterns(), true)?
             }
@@ -529,12 +540,26 @@ impl Engine {
                 candidate.syllables.concat(),
             );
         }
-        if let Some(decoded) = self.decode(keys) {
-            let pinyin_len = self.align(decoded.pinyin(), &candidate.syllables).consumed;
-            return (
-                decoded.keys_for(pinyin_len),
-                choice_key(decoded.pinyin(), pinyin_len),
-            );
+        // 混输时候选可能来自全拼或交替读法：挑对得上最多音节的那条读法换算键数与学习键
+        let readings = self.decode_readings(keys);
+        if !readings.is_empty() {
+            let mut best: Option<(usize, String)> = None;
+            for decoded in &readings {
+                let pinyin_len = self.align(decoded.pinyin(), &candidate.syllables).consumed;
+                if pinyin_len == 0 {
+                    continue;
+                }
+                let consumed = decoded.keys_for(pinyin_len);
+                if best
+                    .as_ref()
+                    .is_none_or(|(keys_used, _)| consumed > *keys_used)
+                {
+                    best = Some((consumed, choice_key(decoded.pinyin(), pinyin_len)));
+                }
+            }
+            if let Some(best) = best {
+                return best;
+            }
         }
         let consumed = match self.active_correction(keys) {
             Some(c) => c
@@ -544,121 +569,6 @@ impl Engine {
             None => self.align(keys, &candidate.syllables).consumed,
         };
         (consumed, choice_key(keys, consumed))
-    }
-
-    /// 候选的音节逐个对到输入上：每个音节按原样 / 规范写法、模糊音或敲错变体（长的在前）、没打完的前缀消耗输入，
-    /// 先找能把**每个音节都对上**的对齐（带回溯：`pingyin` 对 拼音 时 `pin` 原样只吃三个字母会剩下 `gyin`，
-    /// 退回来按敲错变体 `ping` → `pin` 吃四个），找不到才退回逐个贪心对、对不上的地方停下。
-    pub(super) fn align(&self, input: &str, syllables: &[String]) -> Alignment {
-        let mut typos = Vec::new();
-        self.align_full(input, 0, syllables, &mut typos)
-            .unwrap_or_else(|| self.align_greedy(input, syllables))
-    }
-
-    /// 从 `pos` 起把剩下的音节全对上的第一种对齐（按每步的优先级深度优先）；对不上返回 `None`。
-    fn align_full(
-        &self,
-        input: &str,
-        pos: usize,
-        syllables: &[String],
-        typos: &mut Vec<(String, String)>,
-    ) -> Option<Alignment> {
-        let Some((syllable, remaining)) = syllables.split_first() else {
-            return Some(Alignment {
-                consumed: pos,
-                typos: typos.clone(),
-            });
-        };
-        let (rest, start) = self.rest_at(input, pos);
-        for (len, typo) in self.syllable_steps(rest, syllable) {
-            // 消耗完输入后还有音节没对：不算全对上（候选比敲的长）
-            if start + len == input.len() && !remaining.is_empty() {
-                continue;
-            }
-            if typo {
-                typos.push((rest[..len].to_owned(), syllable.clone()));
-            }
-            let found = self.align_full(input, start + len, remaining, typos);
-            if typo {
-                typos.pop();
-            }
-            if found.is_some() {
-                return found;
-            }
-        }
-        None
-    }
-
-    /// 逐个贪心对：每个音节取第一种能对上的消耗，都对不上就取公共前缀，公共前缀也没有就停。
-    fn align_greedy(&self, input: &str, syllables: &[String]) -> Alignment {
-        let mut alignment = Alignment::default();
-        let mut pos = 0;
-        for syllable in syllables {
-            let (rest, start) = self.rest_at(input, pos);
-            if let Some((len, typo)) = self.syllable_steps(rest, syllable).into_iter().next() {
-                if typo {
-                    alignment
-                        .typos
-                        .push((rest[..len].to_owned(), syllable.clone()));
-                }
-                pos = start + len;
-                continue;
-            }
-            let common = syllable
-                .bytes()
-                .zip(rest.bytes())
-                .take_while(|(a, b)| a == b)
-                .count();
-            if common == 0 {
-                break;
-            }
-            pos = start + common;
-        }
-        alignment.consumed = pos;
-        alignment
-    }
-
-    /// `pos` 处这个音节能看到的输入段（到下一个 `'` 为止）与它的起点（跳过开头的 `'`）。
-    /// 缓冲区本身以 `'` 开头（`shan'gou` 选了 闪 剩下 `'gou`）时也要跳过，否则一个键都吃不掉。
-    fn rest_at<'a>(&self, input: &'a str, pos: usize) -> (&'a str, usize) {
-        let start = if input[pos..].starts_with('\'') {
-            pos + 1
-        } else {
-            pos
-        };
-        let rest = &input[start..];
-        let rest = &rest[..rest.find('\'').unwrap_or(rest.len())];
-        (rest, start)
-    }
-
-    /// 一个音节可以怎么消耗输入段 `rest`：(消耗字节数, 是否靠敲错变体)，按优先级排：
-    /// 原样或规范写法（`lue` / `lve`）、模糊音或敲错变体（长的在前）、整段是这个音节没打完的前缀。
-    fn syllable_steps(&self, rest: &str, syllable: &str) -> Vec<(usize, bool)> {
-        let mut steps = Vec::new();
-        let exact = rest.get(..syllable.len()).is_some_and(|typed| {
-            typed == syllable
-                || qingjian_dictionary::canonical_syllable(typed)
-                    == qingjian_dictionary::canonical_syllable(syllable)
-        });
-        if exact {
-            steps.push((syllable.len(), false));
-        }
-        // 没打完排在变体前面：`shijia` 选 时间 是 jian 没敲完，不是把 jian 敲成了 jia
-        if !rest.is_empty() && rest.len() < syllable.len() && syllable.starts_with(rest) {
-            steps.push((rest.len(), false));
-        }
-        for len in (1..=rest.len().min(parser::MAX_SYLLABLE_LEN)).rev() {
-            if exact && len == syllable.len() {
-                continue;
-            }
-            let typed = &rest[..len];
-            if self.fuzzy.is_variant(typed, syllable) {
-                steps.push((len, false));
-            } else if typo::is_variant(typed, syllable) {
-                steps.push((len, true));
-            }
-        }
-        steps
     }
 
     /// 整段作用域对应的候选（英文词、云端词、快捷候选）：吃掉全部键，学习键是整段全拼。

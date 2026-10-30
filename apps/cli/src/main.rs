@@ -480,6 +480,9 @@ fn build_engine(args: &Args) -> Result<Engine, CliError> {
         Some(layout) => engine.set_shuangpin_layout(Some(layout)),
         None => engine.set_shuangpin(scheme.shuangpin()),
     }
+    engine.set_shuangpin_full_pinyin(
+        args.shuangpin_full_pinyin || config.general.shuangpin_full_pinyin,
+    );
     engine.set_zhuyin_mode(scheme == Scheme::Zhuyin);
     engine.set_nine_key(args.nine_key);
     // 拼音侧关掉且形码开着才是「只用形码」；两边都关着时留拼音兜底

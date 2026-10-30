@@ -127,6 +127,10 @@ pub struct Args {
     #[arg(long)]
     pub shuangpin: Option<String>,
 
+    /// 双拼方案下同时接受全拼（覆盖配置里的 `[general]` shuangpin_full_pinyin）：同一段输入里两种打法可以混用
+    #[arg(long)]
+    pub shuangpin_full_pinyin: bool,
+
     /// 九宫格方案：输入写数字键（`64426` → 你好），验证手机 9 键的候选与整句
     #[arg(long)]
     pub nine_key: bool,

@@ -48,6 +48,9 @@ macOS 面板一律系统绘制（青简渲染器还没有面板），`candidates
 窗口在 `ui/panel/`，用 Direct2D DC 渲染目标画在分层窗口合成器的 DIB 上（GDI 画不出彩色 emoji）；渲染目标是软件的，硬件类型要起 D3D 设备，显卡驱动初始化就常驻二三十 MB。没在组句时从菜单打开：协议 `Frame::symbol_panel` 让空缓冲也不算空帧，
 `IndicatorState::symbol_panel` 随 `ModeSync` 让 DLL 进组句态吃键；老 DLL（协议 < 9）收到的颜文字 / 符号候选降级成 `Emoji`。
 双拼解码由 `Engine::decode` 传入当前模糊音规则：先取普通合法音节，失败时才保留能由模糊音补成合法音节的声韵组合（如 `suang` → `shuang`）。查询沿用带代价的模糊音展开，上屏沿用原读音与按键的消耗换算；不修改无模糊音时的 `Scheme::decode` 行为。
+`Engine::decode_readings` 在开了 `[general] shuangpin_full_pinyin` 时给出一段键的多条读法（`shuangpin::Layout::decode_mixed`）：纯双拼、整段全拼、以及按音节边界交替的读法，
+每个位置最多留 `MAX_PATHS`（8）条部分读法；主读法管 preedit / 尾巴，候选覆盖长度换算成敲的键数再排序，整句候选取各读法路径分最高的一条。上屏与整句回灌按候选音节挑对得上的读法换算键数与学习键。
+`engine/commit/mod.rs` 只管上屏主流程；键串与候选音节的对齐（`align`、回溯与敲错变体）拆在 `engine/commit/align.rs`。
 
 CandidateLayout 保持 `set_cloud` 的首页末尾布局与本地首项；`set_cloud_first` 为显式请求提供模型顺序置顶并合并同文普通候选。自定义短语按名次固定的格子保留；`cloud_first()` 供异步本地重排重建布局时沿用当前模式。自动入口及默认配置的 slots 仍指首页末尾。
 

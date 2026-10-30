@@ -10,6 +10,7 @@
 mod decoded;
 mod key_hint;
 mod layout;
+mod mixed;
 mod scheme;
 mod table;
 mod unit;

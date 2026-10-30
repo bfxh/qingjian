@@ -67,6 +67,17 @@ impl Engine {
         self.shuangpin_raw_window
     }
 
+    /// 双拼方案下是否同时接受全拼。开着时同一段输入里的音节可以两种打法混用（`wodemingzi`），
+    /// 一边双拼一边全拼的两个人共用一份设置；关着（缺省）只有双拼一种读法。
+    pub fn set_shuangpin_full_pinyin(&mut self, enabled: bool) {
+        self.shuangpin_full_pinyin = enabled;
+        *self.correction_cache.borrow_mut() = None;
+    }
+
+    pub fn shuangpin_full_pinyin(&self) -> bool {
+        self.shuangpin_full_pinyin
+    }
+
     /// 挂上辅码码表（用户导入的与随包的笔画表）。照 [`Self::set_extra_dictionaries`] 的模式：壳按目录与配置装配。
     pub fn with_aux_codes(mut self, tables: Vec<Arc<dyn AuxCodeLookup>>) -> Self {
         self.aux_codes = tables;
@@ -275,6 +286,23 @@ impl Engine {
             self.shuangpin
                 .as_deref()
                 .map(|layout| EngineDecoded::Shuangpin(layout.decode_fuzzy(keys, self.fuzzy)))
+        }
+    }
+
+    /// 一段键的全部读法：纯双拼（或注音）一条，开了混输时还有全拼与两种打法交替的读法。
+    /// 第一条是主读法，拼音行、尾巴与上屏消耗都按它算；其余读法只参与候选与整句比分数。
+    pub(super) fn decode_readings(&self, keys: &str) -> Vec<EngineDecoded> {
+        match (
+            self.zhuyin,
+            self.shuangpin.as_deref(),
+            self.shuangpin_full_pinyin,
+        ) {
+            (false, Some(layout), true) => layout
+                .decode_mixed(keys, self.fuzzy)
+                .into_iter()
+                .map(EngineDecoded::Shuangpin)
+                .collect(),
+            _ => self.decode(keys).into_iter().collect(),
         }
     }
 
