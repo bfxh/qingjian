@@ -319,6 +319,43 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: tools/release/upload-build.sh linux "$(. /etc/os-release && echo "$PRETTY_NAME"), Fcitx5 $(pkg-config --modversion Fcitx5Core)" target/linux-package/*.tar.gz
 
+  # deb / rpm：全在容器里编（Rust 部分 Ubuntu 22.04，fcitx5 插件对着 Debian 13 / Fedora 42 各编一份），见 docs/notes/linux-packaging.md。
+  # 只挂在 Release 上、不进 releases.json：每种格式两个包（qingjian 与 qingjian-fcitx5），检查更新与官网下载页仍按 tar.gz 认 Linux。
+  linux-packages:
+    needs: prepare
+    if: needs.prepare.outputs.linux == 'true'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # build.sh 把本机的 ~/.cargo 与 ~/.rustup 挂进 Ubuntu 22.04 容器编 Rust 部分
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.96.0
+
+      - name: Fetch product data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tools/release/data-fetch.sh
+
+      - name: Build deb and rpm
+        run: apps/linux/packaging/build.sh deb rpm
+
+      # 在干净容器里装、自检（插件缺不缺库、打 nihao 出候选、卸载清干净）；图形会话里打字仍要真机试
+      - name: Smoke-test packages
+        run: apps/linux/packaging/smoke/run.sh debian:trixie ubuntu:26.04 fedora:42
+
+      - name: Upload to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tools/release/upload-build.sh linux-packages "deb：Debian 13 容器；rpm：Fedora 42 容器；Rust 部分：Ubuntu 22.04 容器" target/linux-pkg/out/*.deb target/linux-pkg/out/*.rpm
+
   android:
     needs: prepare
     if: needs.prepare.outputs.android == 'true'
@@ -393,7 +430,7 @@ jobs:
         run: tools/release/upload-build.sh android "$(. /etc/os-release && echo "$PRETTY_NAME"), NDK $NDK_VERSION" target/android-package/*.apk
 
   publish:
-    needs: [prepare, macos, windows, linux, android]
+    needs: [prepare, macos, windows, linux, linux-packages, android]
     # 没选中的平台是 skipped，照样发；有平台失败就停在草稿
     if: ${{ !cancelled() && needs.prepare.result == 'success' && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-26.04

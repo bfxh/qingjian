@@ -6,6 +6,7 @@ description: 在 Linux（以及 FreeBSD）上安装青简：Fcitx5 预编译包�
 
 青简 Linux 版作为 Fcitx5、IBus 或 Fcitx4 的一个输入法运行，候选使用输入法框架自己的候选面板。目前需要在终端中安装；源码安装可以让青简的后台服务随登录自动启动，预编译包要每次登录后手动启动。
 
+- Debian、Ubuntu、Fedora 可以装 deb / rpm 包，随登录自动启动，见下文「deb / rpm 包」一节。
 - Fcitx5 提供 Ubuntu 26.04 预编译包，其他发行版用源码安装。已验证 Ubuntu 26.04 的 GNOME 桌面（Wayland）上 GTK4、Qt6 应用与 Firefox。
 - IBus（GNOME 自带的输入法框架）用源码安装，不用换框架。已验证按键、候选与上屏，各类应用里的表现尚未逐个验证。
 - Fcitx4 提供 Ubuntu 22.04 源码安装，已验证 GTK3 文本框输入。
@@ -31,6 +32,22 @@ sudo apt install python3 fcitx5 fcitx5-frontend-gtk3 fcitx5-frontend-gtk4 fcitx5
 ```
 
 之后按下文[首次输入](#首次输入)添加输入法。
+
+## deb / rpm 包（Debian、Ubuntu、Fedora）
+
+[GitHub Release](https://github.com/qingjian-team/qingjian/releases/latest) 上另有 deb 与 rpm 包，每种两个：`qingjian` 是青简本体（后台服务、IBus 前端与词库），`qingjian-fcitx5` 是 Fcitx5 插件。用 IBus 只装前一个，用 Fcitx5 两个都装。装好后青简随登录自动启动，不用开终端。
+
+```sh
+# Debian / Ubuntu
+sudo apt install ./qingjian_<版本>_amd64.deb ./qingjian-fcitx5_<版本>_amd64.deb
+
+# Fedora 42 及以后
+sudo dnf install ./qingjian-<版本>-1.fc42.x86_64.rpm ./qingjian-fcitx5-<版本>-1.fc42.x86_64.rpm
+```
+
+- `qingjian` 在 Debian 12、Ubuntu 22.04 及以后都能装；`qingjian-fcitx5` 要较新的 Fcitx5，只有 Debian 13、Ubuntu 25.04、Fedora 42 及以后装得上，更早的系统请用 IBus 或源码安装。
+- IBus 装完要重新登录一次才看得到青简。
+- 卸载：`sudo apt remove qingjian qingjian-fcitx5` 或 `sudo dnf remove qingjian qingjian-fcitx5`，设置与学习数据保留。
 
 ## Fcitx5 与 IBus 源码安装
 

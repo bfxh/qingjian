@@ -6,6 +6,7 @@ description: "Installing Qingjian on Linux (and FreeBSD): the Fcitx5 prebuilt pa
 
 The Linux version of Qingjian runs as an input method in Fcitx5 or Fcitx4, and candidates use Fcitx's own candidate panel. For now it's installed from a terminal, and the background service has to be started by hand after each login.
 
+- On Debian, Ubuntu and Fedora you can install the deb / rpm packages, which start automatically at login; see "deb / rpm packages" below.
 - For Fcitx5 there's a prebuilt package for Ubuntu 26.04; other distributions install from source. Verified with GTK4 and Qt6 apps and Firefox on the GNOME desktop (Wayland) of Ubuntu 26.04.
 - For Fcitx4 there's a source install for Ubuntu 22.04, verified with GTK3 text fields.
 - On FreeBSD 15.1, a Fcitx5 source install has been verified in XFCE and KDE Plasma X11 sessions and with Wayland apps under sway.
@@ -30,6 +31,22 @@ Download the package whose name ends in `linux-x86_64.tar.gz` from the [download
 ```
 
 Then add the input method as described in [Your first input](#Your-first-input) below.
+
+## deb / rpm packages (Debian, Ubuntu, Fedora)
+
+The [GitHub Release](https://github.com/qingjian-team/qingjian/releases/latest) also has deb and rpm packages, two of each: `qingjian` is Qingjian itself (background service, IBus front end and dictionaries), and `qingjian-fcitx5` is the Fcitx5 add-on. With IBus install only the first; with Fcitx5 install both. Qingjian then starts automatically when you log in, no terminal needed.
+
+```sh
+# Debian / Ubuntu
+sudo apt install ./qingjian_<version>_amd64.deb ./qingjian-fcitx5_<version>_amd64.deb
+
+# Fedora 42 and later
+sudo dnf install ./qingjian-<version>-1.fc42.x86_64.rpm ./qingjian-fcitx5-<version>-1.fc42.x86_64.rpm
+```
+
+- `qingjian` installs on Debian 12 and Ubuntu 22.04 or later; `qingjian-fcitx5` needs a recent Fcitx5 and only installs on Debian 13, Ubuntu 25.04, Fedora 42 or later. On older systems use IBus or the source install.
+- With IBus, log out and back in once before Qingjian shows up.
+- To uninstall: `sudo apt remove qingjian qingjian-fcitx5` or `sudo dnf remove qingjian qingjian-fcitx5`. Settings and learned data are kept.
 
 ## Fcitx5 source install
 

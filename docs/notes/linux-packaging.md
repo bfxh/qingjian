@@ -1,6 +1,6 @@
 # Linux 发行包：deb / rpm（2026-09-23）
 
-`apps/linux/packaging/build.sh` 一条命令打两种包，给别的 Linux 机器装着试。
+`apps/linux/packaging/build.sh` 一条命令打两种包。发版时 `release.yml` 的 `linux-packages` job 跑它、用 `smoke/run.sh` 在三个发行版容器里装一遍，再挂到 GitHub Release（0.3.3 起；之前只发 tar.gz）。
 这一页记两种包各装了什么、为什么这么分、怎么装，以及几处绕不过去的限制。
 flatpak 暂不做（2026-10-23）：输入法在沙箱里要靠宿主机上的登记脚本去写服务与 IBus 组件，等于绕开沙箱，出了问题也难查。
 用户级的源码安装（`apps/linux/scripts/install.sh`）另见 [linux-fcitx5.md](linux-fcitx5.md) 与 [linux-dual-frontend.md](linux-dual-frontend.md)。
@@ -51,8 +51,8 @@ sudo apt install ./qingjian_<版本>_amd64.deb ./qingjian-fcitx5_<版本>_amd64.
 ### Fedora 42 及以后（rpm）
 
 ```bash
-sudo dnf install ./qingjian-<版本>.x86_64.rpm
-sudo dnf install ./qingjian-<版本>.x86_64.rpm ./qingjian-fcitx5-<版本>.x86_64.rpm
+sudo dnf install ./qingjian-<版本>-1.fc42.x86_64.rpm
+sudo dnf install ./qingjian-<版本>-1.fc42.x86_64.rpm ./qingjian-fcitx5-<版本>-1.fc42.x86_64.rpm
 ```
 
 KDE Plasma（Wayland）上输入法由 KWin 拉起，默认是 fcitx5：「系统设置 → 键盘 → 虚拟键盘」里选 IBus Wayland
